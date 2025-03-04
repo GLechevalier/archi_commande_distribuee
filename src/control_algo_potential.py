@@ -32,7 +32,6 @@ firstCall = True
 
 global pot # DO NOT MODIFY - allows initialisation of potential function from this script
 
-
 # =============================================================================
 
 
@@ -85,11 +84,38 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     # to get access to potential measurement from robot i at time t in the rest of the code
     # you can use eihter use    pot_measurement[i]     or      pot.value(x[i,:])
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    formation_distance = 1
+    relative_pose = np.array([[formation_distance*np.sin(2*np.pi*i/N) for i in range(N)],       # x-coordinates (m)
+                                [formation_distance*np.cos(2*np.pi*i/N) for i in range(N)]]).T   # y-coordinates (m)
     
+    sum_distances = 0.
+    vel_vector = np.zeros(2)
+    grad_total  = np.zeros(2)
     
+    for i in range(N):
+        if i != robotNo:
+            dist = np.linalg.norm(x[robotNo, :] - x[i, :])
+            dist_rel = np.linalg.norm(relative_pose[robotNo, :] - relative_pose[i, :])
+            sum_distances += abs(dist - formation_distance)
+            vel_vector += ((dist - dist_rel)/dist)*(x[i, :] - x[robotNo, :])
+    
+    for i in range(N):
+        for j in range(N):
+            if i != j:
+                grad_local = (pot_measurement[i] - pot_measurement[j]) / np.linalg.norm(x[i, :] - x[j, :])
+                grad_total +=  np.array([grad_local*(x[j, 0] - x[i, 0]), grad_local*(x[j, 1] - x[i, 1])])
     
     # initialize control input vector for current robot i
-    ui = np.zeros(2)
+    kp = 3
+    kg = 5
+    kto = 0.1
+    dist_consensus = np.linalg.norm(vel_vector)
+    factor_consensus = kp*np.arctan(dist_consensus)/dist_consensus
+    
+    dist_grad = np.linalg.norm(grad_total)
+    factor_grad = (kg*np.arctan(dist_grad)/dist_grad)*(np.pi - 2*np.arctan(sum_distances*kto))/(np.pi)
+    
+    ui = factor_consensus*vel_vector - factor_grad*grad_total
                        
     # compute control input for current robot i
     # ui = .... # <- TO BE COMPLETED 
