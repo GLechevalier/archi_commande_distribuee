@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from ..lib.potential import Potential
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+
 
 pot1 = Potential(difficulty=1, random=True)
 
@@ -58,8 +61,10 @@ def generate_n_points_noise(n: int):
     return L, Ly
 
 
-L, Ly_noise = generate_n_points_noise(10)
+L, Ly_noise = generate_n_points_noise(100)
+L = np.array(L)
 Ly_true = evaluate_n_points_from_list(L)
+Ly_true = np.array(Ly_true)
 print(L), print(Ly_true)
 
 
@@ -69,8 +74,3 @@ def diff(L, Ly_noise):
     for i in range(len(L)):
         sum += (Ly_noise[i] - Ly_true[i]) ** 2
     return sum
-
-
-print(diff(L, Ly_noise))
-
-plt.show()
