@@ -112,6 +112,8 @@ class RobotSimulation:
         graph.set_xlabel('x (m)')
         graph.set_ylabel('y (m)')
         
+        plt.show()
+        
         
         
 
@@ -146,6 +148,8 @@ class RobotSimulation:
             graph.set_xlabel('t (s)')
             graph.set_ylabel('theta (rad)')
             
+        plt.show()
+            
             
             
     # -------------------------------------------------------------------------
@@ -173,6 +177,9 @@ class RobotSimulation:
             graph.set_ylabel('omega (rad/s)')
         if (self.robot.dynamics=='singleIntegrator2D'):
             graph.set_ylabel('uy (m/s)')
+            
+        
+        plt.show()
         
 
     # -------------------------------------------------------------------------       
