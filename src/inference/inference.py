@@ -113,9 +113,13 @@ class LawEstimator:
         )
         return g.ravel()  # Flatten the 2D array to 1D for curve_fit
 
-    def fit(self):
-        L = self.L.transpose()
-        data = self.Ly_true[:].reshape(1, len(self.Ly_true))
+    def fit(self, L=None, data=None):
+        if L is None:
+            L = self.L.transpose()
+            print(L.shape)
+        if data is None:
+            data = self.Ly_true[:].reshape(1, len(self.Ly_true))
+            print(data.shape)
         initial_guess = (1, 0, 0, 1, 1, 0, 0)
 
         popt, pcov = curve_fit(self.twoD_Gaussian, L, data.ravel(), p0=initial_guess)
