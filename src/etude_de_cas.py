@@ -11,9 +11,9 @@ Agent dynamics can either be:
                             control input: [vx, vy]
     -unicycle:   x_dot = V.cos(theta),   y_dot = V.sin(theta),   theta_dot = omega
                             state : [x, y, theta]
-                            control input: [V, omega] 
-                            
-    A conversion function is provided from single integrator inputs to unicycle inputs 
+                            control input: [V, omega]
+
+    A conversion function is provided from single integrator inputs to unicycle inputs
         [V, omega] = si_to_uni( [vx, vy], theta, kp=angular_speed_proportional_gain )
 
 """
@@ -21,6 +21,7 @@ Agent dynamics can either be:
 import numpy as np
 from lib.simulation import FleetSimulation
 from lib.robot import Fleet, si_to_uni
+from lib.gridmap import gridmap
 import control_algo_potential
 
 # from lib.potential import Potential
@@ -34,22 +35,40 @@ nbOfRobots = 4
 
 # dynamics of robots
 # -------------------
+robotDynamics = "singleIntegrator2D"  # use 'singleIntegrator2D' or 'unicycle'
 
-robotDynamics = 'unicycle'    # use 'singleIntegrator2D' or 'unicycle'
+# Limits of the space
+# --------------------
 
-
+limit_min_x = -25
+limit_max_x = 25
+limit_min_y = -25
+limit_max_y = 25
 
 # initial states of robots
-# --------------------------
+# -------------------------
 
 # ... initial positions randomly defined
 # initPositions = 40*np.random.rand(nbOfRobots,2)-20  # random init btw -20, +20
 
 # ... initial positions defined from data      (dimension: nb of agents  x  2)
 
-initPositions = np.array([[ 40*np.random.rand()-20, 40*np.random.rand()-20, 40*np.random.rand()-20, 40*np.random.rand()-20 ],       # x-coordinates (m)
-                          [ 40*np.random.rand()-20, 40*np.random.rand()-20, 40*np.random.rand()-20, 40*np.random.rand()-20 ]]).T   # y-coordinates (m)
-
+initPositions = np.array(
+    [
+        [
+            40 * np.random.rand() - 20,
+            40 * np.random.rand() - 20,
+            40 * np.random.rand() - 20,
+            40 * np.random.rand() - 20,
+        ],  # x-coordinates (m)
+        [
+            40 * np.random.rand() - 20,
+            40 * np.random.rand() - 20,
+            40 * np.random.rand() - 20,
+            40 * np.random.rand() - 20,
+        ],
+    ]
+).T  # y-coordinates (m)
 
 
 # ... initial orientation angles and poses (USED FOR UNICYCLE DYNAMICS ONLY)
@@ -114,11 +133,10 @@ for t in simulation.t:
 
     # store potential measurements in history (for plots)
     potential_measurements[t_index, :] = pot.value(robots_poses[:, 0:2])
-    if -10 in potential_measurements[t_index, :]:
-        print("!!!!!!!!!!!!! ERROR in potential value definition !!!!!!!!!!!!!")
-        print(
-            "Please modify Potential parameters or start another simulation if using random definition"
-        )
+
+    # if (-10 in potential_measurements[t_index,:]):
+    #     print("!!!!!!!!!!!!! ERROR in potential value definition !!!!!!!!!!!!!")
+    #     print('Please modify Potential parameters or start another simulation if using random definition')
     t_index += 1
 
     # update data of simulation
@@ -147,6 +165,8 @@ simulation.plotCtrl(figNo=6)
 
 simulation.plotXY(figNo=10, steps=50, links=True)
 
+gridmap_record = control_algo_potential.get_gridmap()
+gridmap_record.plot(t, permanent=True)
 
 
 # plot time history of potential measurements done by the robots and maximum value to be found
@@ -160,4 +180,3 @@ plt.xlabel("t (s)")
 plt.ylabel("Potential value (-)")
 plt.grid()
 plt.show()
-
