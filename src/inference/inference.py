@@ -4,7 +4,7 @@ from ..lib.potential import Potential
 from scipy.optimize import curve_fit
 
 
-pot1 = Potential(difficulty=1, random=True)
+pot1 = Potential(difficulty=1, random=False)
 
 fig2, ax2 = pot1.plot(2)
 
