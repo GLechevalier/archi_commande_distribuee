@@ -63,12 +63,14 @@ def sample(x, y, percentage):
 
 
 L = sample(x, y, 0.1)
+print(L.transpose())
 
 n_data = len(L[0])
 
 data = twoD_Gaussian(L, **true_params).reshape(1, n_data)
 
-print(data)
+print(data[0])
+
 
 # Add noise to simulate observations
 noise = 0.00 * np.random.normal(size=data.shape)

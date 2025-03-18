@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from ..lib.potential import Potential
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import RBF, WhiteKernel
+from scipy.optimize import curve_fit
 
 
 pot1 = Potential(difficulty=1, random=True)
@@ -65,7 +64,6 @@ L, Ly_noise = generate_n_points_noise(100)
 L = np.array(L)
 Ly_true = evaluate_n_points_from_list(L)
 Ly_true = np.array(Ly_true)
-print(L), print(Ly_true)
 
 
 def diff(L, Ly_noise):
@@ -74,3 +72,51 @@ def diff(L, Ly_noise):
     for i in range(len(L)):
         sum += (Ly_noise[i] - Ly_true[i]) ** 2
     return sum
+
+
+L = L.transpose()
+data = Ly_true[:].reshape(1, len(Ly_true))
+print(L)
+print(data)
+
+# Initial guess for parameters
+initial_guess = (1, 0, 0, 1, 1, 0, 0)
+
+
+# Define the 2D Gaussian function
+def twoD_Gaussian(coordinates, amplitude, xo, yo, sigma_x, sigma_y, theta, offset):
+    x, y = coordinates
+    xo = float(xo)
+    yo = float(yo)
+    # Calculate the rotation components
+    a = (np.cos(theta) ** 2) / (2 * sigma_x**2) + (np.sin(theta) ** 2) / (
+        2 * sigma_y**2
+    )
+    b = -np.sin(2 * theta) / (4 * sigma_x**2) + np.sin(2 * theta) / (4 * sigma_y**2)
+    c = (np.sin(theta) ** 2) / (2 * sigma_x**2) + (np.cos(theta) ** 2) / (
+        2 * sigma_y**2
+    )
+    # Compute the Gaussian function
+    g = offset + np.log10(
+        amplitude
+        * np.exp(
+            -(a * ((x - xo) ** 2) + 2 * b * (x - xo) * (y - yo) + c * ((y - yo) ** 2))
+        )
+    )
+    return g.ravel()  # Flatten the 2D array to 1D for curve_fit
+
+
+# Perform the curve fitting
+popt, pcov = curve_fit(twoD_Gaussian, L, data.ravel(), p0=initial_guess)
+
+popt_dict = {
+    "amplitude": popt[0],
+    "xo": popt[1],
+    "yo": popt[2],
+    "sigma_x": popt[3],
+    "sigma_y": popt[4],
+    "theta": popt[5],
+    "offset": popt[6],
+}
+
+print("Fitted parameters:", popt_dict)
