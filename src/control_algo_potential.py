@@ -40,8 +40,6 @@ global gridmap_record
 # =============================================================================
 
 
-
-
 # =============================================================================
 def potential_seeking_ctrl(t, robotNo, robots_poses):
 # =============================================================================
@@ -65,7 +63,7 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
         #     YOU CAN MODIFY difficulty {1,2,3} AND random {True, False} PARAMETERS
         pot = Potential(difficulty=3, random=True)  
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        gridmap_record = 
+        gridmap_record = gridmap(-25, 25, -25, 25, 0.5, 0.5) # A bit dangerous to do so because not 
         # you can add here other instructions to be executed only once
         
         firstCall = False
@@ -85,6 +83,9 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     pot_measurement = np.zeros(N)
     for m in range(N):
         pot_measurement[m] = pot.value(x[m,:])
+        
+        print(x[m, :])
+        gridmap_record.update(x[m, 0], x[m, 1], pot_measurement[m], t)
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # to get access to potential measurement from robot i at time t in the rest of the code
@@ -97,7 +98,10 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     return ui[0], ui[1], pot   # potential is also returned to be used by main script for displays (DO NOT MODIFY)
 # =============================================================================
 
-
+def get_gridmap():
+    global gridmap_record
+    
+    return gridmap_record
 
 
 
@@ -120,7 +124,7 @@ def formation_gradient(t, robotNo, N, x, measurement):
         if i != robotNo:
             dist = np.linalg.norm(x[robotNo, :] - x[i, :])
             dist_rel = np.linalg.norm(relative_pose[robotNo, :] - relative_pose[i, :])
-            sum_distances += abs(dist - formation_distance)
+            sum_distances += max(dist - formation_distance, 0)
             vel_vector += ((dist - dist_rel)/dist)*(x[i, :] - x[robotNo, :])
             
         if measurement[robotNo] == -10: ## Correction in order to go toward the center of the field if all the robots are too far from sources
@@ -141,12 +145,23 @@ def formation_gradient(t, robotNo, N, x, measurement):
     factor_consensus = kp*np.arctan(dist_consensus)/dist_consensus
     
     dist_grad = np.linalg.norm(grad_total)
-    factor_grad = (kg*np.arctan(dist_grad)/dist_grad)*(np.pi - 2*np.arctan(sum_distances*kto))/(np.pi)
+    if dist_grad < 0.0001:
+        factor_grad = 0
+    else:
+        factor_grad = (kg*np.arctan(dist_grad)/dist_grad)*(np.pi - 2*np.arctan(sum_distances*kto))/(np.pi)
     
     v = factor_consensus*vel_vector - factor_grad*grad_total
+    
+    if (sum_distances < 0.2) and (dist_grad < 0.1):
+        potential_source = np.array([np.mean(x[:, 0]), np.mean(x[:, 1])])
+        for source in detected_sources:
+            if np.linalg.norm(source -potential_source) < 0.1:
+                break
+        
+        else:
+            detected_sources[potential_source] = ([[1.0, 0.], [0., 1.]], 10)
 
     # .................  TO BE COMPLETED HERE .............................
-    
     return v
 # =============================================================================
 

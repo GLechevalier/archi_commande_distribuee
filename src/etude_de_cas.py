@@ -146,6 +146,8 @@ simulation.plotCtrl(figNo=6)
 # plot 2D trajectories (every 'X steps' time instants
 simulation.plotXY(figNo=10, steps=50, links=True)
 
+gridmap_record = control_algo_potential.get_gridmap()
+gridmap_record.plot(t, permanent=True)
 
 
 # plot time history of potential measurements done by the robots and maximum value to be found
