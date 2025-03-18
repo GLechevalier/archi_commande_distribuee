@@ -21,6 +21,7 @@ Agent dynamics can either be:
 import numpy as np
 from lib.simulation import FleetSimulation
 from lib.robot import Fleet, si_to_uni
+from lib.gridmap import gridmap
 import control_algo_potential
 #from lib.potential import Potential
 import matplotlib.pyplot as plt
@@ -35,11 +36,18 @@ nbOfRobots = 4
 
 # dynamics of robots
 # -------------------
-robotDynamics = 'unicycle'    # use 'singleIntegrator2D' or 'unicycle'
+robotDynamics = 'singleIntegrator2D'    # use 'singleIntegrator2D' or 'unicycle'
 
+# Limits of the space
+# --------------------
+
+limit_min_x = -25
+limit_max_x = 25
+limit_min_y = -25
+limit_max_y = 25
 
 # initial states of robots 
-# --------------------------
+# -------------------------
 
 # ... initial positions randomly defined 
 #initPositions = 40*np.random.rand(nbOfRobots,2)-20  # random init btw -20, +20
@@ -105,9 +113,10 @@ for t in simulation.t:
 
     # store potential measurements in history (for plots)
     potential_measurements[t_index,:] = pot.value(robots_poses[:,0:2])
-    if (-10 in potential_measurements[t_index,:]):
-        print("!!!!!!!!!!!!! ERROR in potential value definition !!!!!!!!!!!!!")
-        print('Please modify Potential parameters or start another simulation if using random definition')
+    
+    # if (-10 in potential_measurements[t_index,:]):
+    #     print("!!!!!!!!!!!!! ERROR in potential value definition !!!!!!!!!!!!!")
+    #     print('Please modify Potential parameters or start another simulation if using random definition')
     t_index += 1
     
     
