@@ -25,6 +25,7 @@ from lib.gridmap import gridmap
 import control_algo_potential
 
 # from lib.potential import Potential
+import lib.eval_metrics as evm
 import matplotlib.pyplot as plt
 
 
@@ -94,6 +95,7 @@ simulation = FleetSimulation(fleet, t0=0.0, tf=10.0, dt=Ts)
 # create history of potential measurements done by the robots
 potential_measurements = np.zeros((simulation.t.shape[0], nbOfRobots))
 t_index = 0
+verbose = False
 
 
 # simulation loop
@@ -117,19 +119,20 @@ for t in simulation.t:
             )
 
     # display potential values measured by the robots and maximum value to be found
-    if t_index == 0:
-        print(
-            "\n[      potential value measured by each robot       ] | max value to be found"
-        )
-        print(
-            "------------------------------------------------------------------------------"
-        )
-    else:
-        print(
-            str(pot.value(robots_poses[:, 0:2]))
-            + " | "
-            + str(np.max(pot.value(pot.mu)))
-        )
+    if verbose:
+        if t_index == 0:
+            print(
+                "\n[      potential value measured by each robot       ] | max value to be found"
+            )
+            print(
+                "------------------------------------------------------------------------------"
+            )
+        else:
+            print(
+                str(pot.value(robots_poses[:, 0:2]))
+                + " | "
+                + str(np.max(pot.value(pot.mu)))
+            )
 
     # store potential measurements in history (for plots)
     potential_measurements[t_index, :] = pot.value(robots_poses[:, 0:2])
@@ -166,7 +169,12 @@ simulation.plotCtrl(figNo=6)
 simulation.plotXY(figNo=10, steps=50, links=True)
 
 gridmap_record = control_algo_potential.get_gridmap()
-gridmap_record.plot(t, permanent=True)
+gridmap_record.plot(t, permanent=False)
+
+
+relative_pot_found_error, total_distance = evm.eval_metrics(simulation, potential_measurements, pot)
+print('relative error on max potential estimate: ' + str(relative_pot_found_error))
+print('total distance: ' + str(total_distance))
 
 
 # plot time history of potential measurements done by the robots and maximum value to be found

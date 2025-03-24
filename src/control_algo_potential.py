@@ -20,6 +20,7 @@ import numpy as np
 import math
 from lib.potential import Potential
 from lib.gridmap import gridmap
+from inference.inference import LawEstimator_data
 
 
 # ==============   "GLOBAL" VARIABLES KNOWN BY ALL THE FUNCTIONS ==============
@@ -33,9 +34,10 @@ firstCall = True
 
 global pot # DO NOT MODIFY - allows initialisation of potential function from this script
 global detected_sources
-detected_sources = {}
+detected_sources = []
 
 global gridmap_record
+global law_est
 
 # =============================================================================
 
@@ -53,6 +55,7 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     global pot
     global detected_sources
     global gridmap_record
+    global law_est
     
 
 
@@ -61,9 +64,11 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     
         # !!!!!!!!!!!!!!!!!!!!!!!  DO NOT REMOVE !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         #     YOU CAN MODIFY difficulty {1,2,3} AND random {True, False} PARAMETERS
-        pot = Potential(difficulty=3, random=True)  
+        pot = Potential(difficulty=3, random=True) 
+        pot.get_truth() 
         # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        gridmap_record = gridmap(-25, 25, -25, 25, 0.5, 0.5) # A bit dangerous to do so because not 
+        gridmap_record = gridmap(-25, 25, -25, 25, 0.5, 0.5) # A bit dangerous to do so because not
+        law_est = LawEstimator_data()
         # you can add here other instructions to be executed only once
         
         firstCall = False
@@ -83,15 +88,15 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     pot_measurement = np.zeros(N)
     for m in range(N):
         pot_measurement[m] = pot.value(x[m,:])
-        
-        print(x[m, :])
         gridmap_record.update(x[m, 0], x[m, 1], pot_measurement[m], t)
+        
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     # to get access to potential measurement from robot i at time t in the rest of the code
     # you can use eihter use    pot_measurement[i]     or      pot.value(x[i,:])
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
+    law_est.update(x[m:m+1, :], np.array([[pot_measurement[robotNo]]]))
     ui = formation_gradient(t, robotNo, N, x, pot_measurement)
     
     
@@ -111,6 +116,7 @@ def formation_gradient(t, robotNo, N, x, measurement):
 # ============================================================================= 
     
     global detected_sources
+    global law_est
 
     formation_distance = 1
     relative_pose = np.array([[formation_distance*np.sin(2*np.pi*i/N) for i in range(N)],       # x-coordinates (m)
@@ -124,7 +130,7 @@ def formation_gradient(t, robotNo, N, x, measurement):
         if i != robotNo:
             dist = np.linalg.norm(x[robotNo, :] - x[i, :])
             dist_rel = np.linalg.norm(relative_pose[robotNo, :] - relative_pose[i, :])
-            sum_distances += max(dist - formation_distance, 0)
+            sum_distances += max(dist - dist_rel, 0)
             vel_vector += ((dist - dist_rel)/dist)*(x[i, :] - x[robotNo, :])
             
         if measurement[robotNo] == -10: ## Correction in order to go toward the center of the field if all the robots are too far from sources
@@ -152,14 +158,17 @@ def formation_gradient(t, robotNo, N, x, measurement):
     
     v = factor_consensus*vel_vector - factor_grad*grad_total
     
-    if (sum_distances < 0.2) and (dist_grad < 0.1):
+
+    if (sum_distances < 0.1) and (dist_grad < 0.01):
         potential_source = np.array([np.mean(x[:, 0]), np.mean(x[:, 1])])
         for source in detected_sources:
-            if np.linalg.norm(source -potential_source) < 0.1:
+            if np.linalg.norm(source - potential_source) < 0.1:
                 break
         
         else:
-            detected_sources[potential_source] = ([[1.0, 0.], [0., 1.]], 10)
+            law_est.fit()
+            detected_sources.append(potential_source)
+            print(potential_source)
 
     # .................  TO BE COMPLETED HERE .............................
     return v

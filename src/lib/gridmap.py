@@ -25,13 +25,13 @@ class gridmap:
 
         # map of intensities values from t = t0 to t = tf
         self.map = np.zeros((int(round((self.ymax-self.ymin)/self.dy, 0)), int(round((self.xmax-self.xmin)/self.dx, 0))))
-        print(np.shape(self.map))
+        #print(np.shape(self.map))
 
         # number of times a cell of the map had its value updated
-        self.map_occurences = np.zeros((int(round((self.ymax-self.ymin)/self.dy, 0)), int(round((self.xmax-self.xmin)/self.dx, 0))))
-        print(np.shape(self.map_occurences))
+        self.map_occurences = -10*np.ones((int(round((self.ymax-self.ymin)/self.dy, 0)), int(round((self.xmax-self.xmin)/self.dx, 0))))
+        #print(np.shape(self.map_occurences))
         
-    def update(self, xpos, ypos, particle_intensity_value, t):
+    def update(self, xpos, ypos, particle_intensity_value, t, verbose= False):
         
         #print(ypos, self.ymin, self.dy, self.ymax)
         #print(-(ypos - self.ymin)/self.dy + (self.ymax-self.ymin)/self.dy - self.dy)
@@ -51,10 +51,10 @@ class gridmap:
 
             
         
-
-        print(f"updating position {xpos}x{ypos} at time {t}")
-        print(f"total position updates : {self.map_occurences[map_line_index, map_column_index]}")
-        print(f"position in table : line = {map_line_index}, column = {map_column_index}")
+        if verbose:
+            print(f"updating position {xpos}x{ypos} at time {t}")
+            print(f"total position updates : {self.map_occurences[map_line_index, map_column_index]}")
+            print(f"position in table : line = {map_line_index}, column = {map_column_index}")
 
         
 
@@ -98,16 +98,6 @@ class gridmap:
 
     #         self.plot(fig, ax, t)
 
-
-        
-
-
-
-
-
-
-
-
 # ============================== MAIN =========================================        
 if __name__ =='__main__':
 # =============================================================================
@@ -131,38 +121,6 @@ if __name__ =='__main__':
     
     grid_test.update(0, 0, 45, 1)
     fig, ax = grid_test.plot(3, fig, ax,  pause_time=1)
-
-    plt.show()
-
-        
-
-
-
-
-
-
-
-
-# ============================== MAIN =========================================        
-if __name__=='__main__':
-# =============================================================================
-
-    xmin = -10
-    xmax = 10
-    
-    ymin = -10
-    ymax = 10
-
-    dx = 0.1
-    dy = 0.2
-
-    t0 = 0
-    tf = 5
-    dt = 0.1
-
-    grid_test = gridmap(xmin, xmax, ymin, ymax, dx, dy, t0, tf, dt)
-    grid_test.update(0, 0, 15, 1)
-    grid_test.plot(1)
 
     plt.show()
 

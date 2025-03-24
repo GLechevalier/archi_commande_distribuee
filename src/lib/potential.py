@@ -176,6 +176,9 @@ class Potential:
         ax.text(pt[0]+epsilon,pt[1],  '%.2f' % (180./np.pi*np.arctan2(meanGrad[1],meanGrad[0])) )
     
         return meanGrad
+    
+    def get_truth(self):
+        print(self.mu)
 
 
 # ======================== END OF CLASS Potential =============================

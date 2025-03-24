@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from ..lib.potential import Potential
+from lib.potential import Potential
 from scipy.optimize import curve_fit
+
 
 
 class DataGenerator:
@@ -119,6 +120,77 @@ class LawEstimator:
         initial_guess = (1, 0, 0, 1, 1, 0, 0)
 
         popt, pcov = curve_fit(self.twoD_Gaussian, L, data.ravel(), p0=initial_guess)
+
+        popt_dict = {
+            "amplitude": popt[0],
+            "xo": popt[1],
+            "yo": popt[2],
+            "sigma_x": popt[3],
+            "sigma_y": popt[4],
+            "theta": popt[5],
+            "offset": popt[6],
+        }
+        self.popt_dict = popt_dict
+        print("Fitted parameters:", popt_dict)
+        return self.popt_dict
+    
+class LawEstimator_data:
+    def __init__(self):
+        self.L = None
+        self.data = None
+
+    def update(self, pos, particle_intensity_value):
+        if self.L is None:
+            self.L = pos.T
+        else:
+            self.L = np.concatenate((self.L, pos.T), 1)
+            
+        if self.data is None:
+            self.data = particle_intensity_value
+        else:
+            self.data = np.concatenate((self.data, particle_intensity_value), 1)
+
+    def twoD_Gaussian(
+        self,
+        coordinates,
+        amplitude,
+        xo,
+        yo,
+        sigma_x,
+        sigma_y,
+        theta,
+        offset,
+    ):
+        x, y = coordinates
+        xo = float(xo)
+        yo = float(yo)
+        # Calculate the rotation components
+        a = (np.cos(theta) ** 2) / (2 * sigma_x**2) + (np.sin(theta) ** 2) / (
+            2 * sigma_y**2
+        )
+        b = -np.sin(2 * theta) / (4 * sigma_x**2) + np.sin(2 * theta) / (4 * sigma_y**2)
+        c = (np.sin(theta) ** 2) / (2 * sigma_x**2) + (np.cos(theta) ** 2) / (
+            2 * sigma_y**2
+        )
+        # Compute the Gaussian function
+        g = offset + np.log10(
+            amplitude
+            * np.exp(
+                -(
+                    a * ((x - xo) ** 2)
+                    + 2 * b * (x - xo) * (y - yo)
+                    + c * ((y - yo) ** 2)
+                )
+            )
+        )
+        return g.ravel()  # Flatten the 2D array to 1D for curve_fit
+
+    def fit(self):
+        if self.L.shape[1] < 10:
+            return
+        initial_guess = (1, 0, 0, 1, 1, 0, 0)
+
+        popt, pcov = curve_fit(self.twoD_Gaussian, self.L, self.data.ravel(), p0=initial_guess)
 
         popt_dict = {
             "amplitude": popt[0],
