@@ -100,13 +100,45 @@ class Potential:
             fig = plt.figure(noFigure)
         if (ax==None):
             ax = fig.add_subplot(111)
+            
+        # Séparation des coordonnées x et y
+        x_values, y_values = zip(*self.mu)
         cs = ax.contourf(x, y, potentialFieldForPlot, 20, cmap='BrBG')
+        ax.scatter(x_values, y_values)
         #cs = ax.contour(x, y, potentialFieldForPlot, 10, cmap='BrBG')
         
         if (colorbar):
             fig.colorbar(cs)
         
         return fig, ax
+    
+    # # -------------------------------------------------------------------------
+    # def plot_test(self,noFigure=None,fig=None,ax=None, colorbar=True):
+    # # -------------------------------------------------------------------------
+    #     x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
+    #     pos = np.dstack((x, y))
+    #     potentialFieldForPlot_temp = self.value(pos)
+        
+        
+    #     # expt = np.exp(np.fmax((potentialFieldForPlot_temp - 310.), -50)*np.log(10))
+        
+    #     comp = multivariate_normal(self.mu2, [[1.0, 0.], [0., 1.]])
+    #     # expt -= 10*comp.pdf(pos)
+        
+    #     potentialFieldForPlot = potentialFieldForPlot_temp - np.fmax(310.+np.log10(comp.pdf(pos)), -10.)
+    #     if (fig==None):
+    #         if (noFigure==None):
+    #             noFigure=1
+    #         fig = plt.figure(noFigure)
+    #     if (ax==None):
+    #         ax = fig.add_subplot(111)
+    #     cs = ax.contourf(x, y, potentialFieldForPlot, 20, cmap='BrBG')
+    #     #cs = ax.contour(x, y, potentialFieldForPlot, 10, cmap='BrBG')
+        
+    #     if (colorbar):
+    #         fig.colorbar(cs)
+        
+    #     return fig, ax
 
     # -------------------------------------------------------------------------
     def grad(self, pos1, pos2):
@@ -183,6 +215,33 @@ class Potential:
 
 # ======================== END OF CLASS Potential =============================
 
+def g(x, mu, Sigma, alpha=1.0):
+    """
+    Fonction qui a les mêmes lignes de niveau que le logarithme d'une gaussienne,
+    mais décroît moins vite et se stabilise à 0.
+    
+    Paramètres :
+        x : np.array, vecteur de point où évaluer la fonction
+        mu : np.array, vecteur moyen de la gaussienne
+        Sigma : np.array, matrice de covariance (doit être inversible)
+        alpha : float, paramètre de contrôle de la décroissance
+    
+    Retour :
+        float, valeur de g(x)
+    """
+    diff = x - mu
+    Sigma_inv = np.linalg.inv(Sigma)
+    quad_form = np.dot(diff.T, np.dot(Sigma_inv, diff))
+    return -1 / (1 + alpha * quad_form)
+
+# Exemple d'utilisation
+mu = np.array([0, 0])  # Moyenne en 2D
+Sigma = np.array([[1, 0], [0, 1]])  # Matrice de covariance identitaire
+x = np.array([1, 1])  # Point où évaluer g
+
+g_value = g(x, mu, Sigma, alpha=0.5)
+print("g(x) =", g_value)
+
 
 
 
@@ -219,6 +278,6 @@ if __name__=='__main__':
     
     
     pot.plot(1)
-    
+    #pot.plot_test(3)
     
     plt.show()

@@ -36,7 +36,7 @@ nbOfRobots = 4
 
 # dynamics of robots
 # -------------------
-robotDynamics = "singleIntegrator2D"  # use 'singleIntegrator2D' or 'unicycle'
+robotDynamics = "unicycle"  # use 'singleIntegrator2D' or 'unicycle'
 
 # Limits of the space
 # --------------------
@@ -90,7 +90,7 @@ else:
 Ts = 0.05
 
 # create simulation
-simulation = FleetSimulation(fleet, t0=0.0, tf=10.0, dt=Ts)
+simulation = FleetSimulation(fleet, t0=0.0, tf=20.0, dt=Ts)
 
 # create history of potential measurements done by the robots
 potential_measurements = np.zeros((simulation.t.shape[0], nbOfRobots))
