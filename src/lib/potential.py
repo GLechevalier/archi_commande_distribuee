@@ -84,7 +84,7 @@ class Potential:
         for i in range(self.difficulty):
             sumval += self.weight[i]*self.distribution[i].pdf(pos)
         
-        return np.fmax(310.+np.log10(sumval), -10.)
+        return 310. + np.log10(sumval + 1e-309)
 
 
     # -------------------------------------------------------------------------
@@ -112,33 +112,111 @@ class Potential:
         
         return fig, ax
     
-    # # -------------------------------------------------------------------------
-    # def plot_test(self,noFigure=None,fig=None,ax=None, colorbar=True):
-    # # -------------------------------------------------------------------------
-    #     x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
-    #     pos = np.dstack((x, y))
-    #     potentialFieldForPlot_temp = self.value(pos)
+    
+    def plot_essai(self, weight, distr, colorbar=True):
+        x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
+        pos = np.dstack((x, y))
+        potentialFieldForPlot = self.value(pos)
         
+        potential = 310. + np.log10(weight*distr.pdf(pos) + 1e-309)
         
-    #     # expt = np.exp(np.fmax((potentialFieldForPlot_temp - 310.), -50)*np.log(10))
+        ratio1 = np.fmax(potential / potentialFieldForPlot, 0.)
         
-    #     comp = multivariate_normal(self.mu2, [[1.0, 0.], [0., 1.]])
-    #     # expt -= 10*comp.pdf(pos)
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        cs = ax.contourf(x, y, potentialFieldForPlot, 20, cmap='BrBG')
         
-    #     potentialFieldForPlot = potentialFieldForPlot_temp - np.fmax(310.+np.log10(comp.pdf(pos)), -10.)
-    #     if (fig==None):
-    #         if (noFigure==None):
-    #             noFigure=1
-    #         fig = plt.figure(noFigure)
-    #     if (ax==None):
-    #         ax = fig.add_subplot(111)
-    #     cs = ax.contourf(x, y, potentialFieldForPlot, 20, cmap='BrBG')
-    #     #cs = ax.contour(x, y, potentialFieldForPlot, 10, cmap='BrBG')
+        if (colorbar):
+            fig.colorbar(cs)
         
-    #     if (colorbar):
-    #         fig.colorbar(cs)
+        x_values, y_values = zip(*self.mu)
+        fig, axes = plt.subplots(1, 1, figsize=(15, 5))
+
+        cs1 = axes.contourf(x, y, ratio1, 20, cmap='coolwarm', vmin=0, vmax=1)
+        axes.set_title("Ratio: PotentialFieldForPlot / Potential 1")
+        axes.scatter(x_values[0], y_values[0])
+        plt.colorbar(cs1, ax=axes)
         
-    #     return fig, ax
+        plt.tight_layout()
+        
+        # Création d'une image RGB vide (initialement noire)
+        color_map = np.zeros((*ratio1.shape, 3))  # (height, width, 3) pour R, G, B
+
+        # Appliquer les couleurs en fonction des ratios
+        color_map[..., 0] = (ratio1 > 0.95).astype(float).T  # Rouge si ratio1 > 0.95
+
+        # Affichage de l'image colorée
+        plt.figure(figsize=(6,6))
+        plt.imshow(color_map, extent=[x.min(), x.max(), y.min(), y.max()], origin="lower")
+        plt.scatter(x_values, y_values)
+        plt.title("Zones où ratio > 0.95")
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.show()
+    
+    # -------------------------- -----------------------------------------------
+    def plot_test(self, noFigure=None,fig=None,ax=None, colorbar=True):
+    # -------------------------------------------------------------------------
+        x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
+        pos = np.dstack((x, y))
+        potentialFieldForPlot = self.value(pos)
+        
+        potential1 = 310. + np.log10(self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
+        potential2 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + 1e-309)
+        potential3 = 310. + np.log10(self.weight[1]*self.distribution[2].pdf(pos) + 1e-309)
+        
+        ratio1 = np.fmax(potential1 / potentialFieldForPlot, 0.)
+        ratio2 = np.fmax(potential2 / potentialFieldForPlot, 0.)
+        ratio3 = np.fmax(potential3 / potentialFieldForPlot, 0.)
+        
+        if (fig==None):
+            if (noFigure==None):
+                noFigure=1
+            fig = plt.figure(noFigure)
+        if (ax==None):
+            ax = fig.add_subplot(111)
+        cs = ax.contourf(x, y, potentialFieldForPlot, 20, cmap='BrBG')
+        
+        if (colorbar):
+            fig.colorbar(cs)
+        
+        x_values, y_values = zip(*self.mu)
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+        cs1 = axes[0].contourf(x, y, ratio1, 20, cmap='coolwarm', vmin=0, vmax=1)
+        axes[0].set_title("Ratio: PotentialFieldForPlot / Potential 1")
+        axes[0].scatter(x_values[0], y_values[0])
+        plt.colorbar(cs1, ax=axes[0])
+
+        cs2 = axes[1].contourf(x, y, ratio2, 20, cmap='coolwarm', vmin=0, vmax=1)
+        axes[1].set_title("Ratio: PotentialFieldForPlot / Potential 2")
+        axes[1].scatter(x_values[1], y_values[1])
+        plt.colorbar(cs2, ax=axes[1])
+
+        cs3 = axes[2].contourf(x, y, ratio3, 20, cmap='coolwarm', vmin=0, vmax=1)
+        axes[2].set_title("Ratio: PotentialFieldForPlot / Potential 3")
+        axes[2].scatter(x_values[2], y_values[2])
+        plt.colorbar(cs3, ax=axes[2])
+        
+        plt.tight_layout()
+        
+        # Création d'une image RGB vide (initialement noire)
+        color_map = np.zeros((*ratio1.shape, 3))  # (height, width, 3) pour R, G, B
+
+        # Appliquer les couleurs en fonction des ratios
+        color_map[..., 0] = (ratio1 > 0.99).astype(float).T  # Rouge si ratio1 > 0.95
+        color_map[..., 1] = (ratio2 > 0.99).astype(float).T  # Vert si ratio2 > 0.95
+        color_map[..., 2] = (ratio3 > 0.99).astype(float).T  # Bleu si ratio3 > 0.95
+
+        # Affichage de l'image colorée
+        plt.figure(figsize=(6,6))
+        plt.imshow(color_map, extent=[x.min(), x.max(), y.min(), y.max()], origin="lower")
+        plt.scatter(x_values, y_values)
+        plt.title("Zones où ratio > 0.95")
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        
+        return fig, ax
 
     # -------------------------------------------------------------------------
     def grad(self, pos1, pos2):
@@ -278,6 +356,6 @@ if __name__=='__main__':
     
     
     pot.plot(1)
-    #pot.plot_test(3)
+    pot.plot_test(3)
     
     plt.show()

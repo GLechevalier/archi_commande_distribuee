@@ -447,6 +447,14 @@ class FleetSimulation:
                                 
                 # robot and trajectory
                 plot_robot(x, y, theta, x_traj, y_traj, scale=robot_scale, color=colorList[i_color])
+                
+                # # Définition du vecteur
+                # origin = np.array([x, y])  # Point d'origine
+                # vector = self.robotSimulation[i_rob].ctrl[i, :]
+
+                # # Création du plot
+                # plt.quiver(origin, vector, angles='xy', scale_units='xy', scale=1, color='r')
+
 
 
             plt.xlabel("x (m)")

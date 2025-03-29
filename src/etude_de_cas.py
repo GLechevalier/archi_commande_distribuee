@@ -32,11 +32,13 @@ import matplotlib.pyplot as plt
 # number of robots
 # -----------------
 nbOfRobots = 4
-
+random_poses = True
 
 # dynamics of robots
 # -------------------
 robotDynamics = "unicycle"  # use 'singleIntegrator2D' or 'unicycle'
+difficulty = 3
+random = False
 
 # Limits of the space
 # --------------------
@@ -46,6 +48,19 @@ limit_max_x = 25
 limit_min_y = -25
 limit_max_y = 25
 
+ech_x = 0.5
+ech_y = 0.5
+
+# Parametres
+# -------------------
+kp = 2
+kg = 5
+kpi = 0.1
+kgi = 0.1
+kto = 0.1
+kr = 0.5
+
+fenetre = 10
 # initial states of robots
 # -------------------------
 
@@ -53,23 +68,26 @@ limit_max_y = 25
 # initPositions = 40*np.random.rand(nbOfRobots,2)-20  # random init btw -20, +20
 
 # ... initial positions defined from data      (dimension: nb of agents  x  2)
-
-initPositions = np.array(
-    [
+if random_poses:
+    initPositions = np.array(
         [
-            40 * np.random.rand() - 20,
-            40 * np.random.rand() - 20,
-            40 * np.random.rand() - 20,
-            40 * np.random.rand() - 20,
-        ],  # x-coordinates (m)
-        [
-            40 * np.random.rand() - 20,
-            40 * np.random.rand() - 20,
-            40 * np.random.rand() - 20,
-            40 * np.random.rand() - 20,
-        ],
-    ]
-).T  # y-coordinates (m)
+            [
+                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20,
+            ],  # x-coordinates (m)
+            [
+                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20,
+            ],
+        ]
+    ).T  # y-coordinates (m)
+else:
+    initPositions = np.array([[ -20, -21, -21, -20 ],       # x-coordinates (m)
+                          [-20, -20, -21, -21 ]]).T   # y-coordinates (m)
 
 
 # ... initial orientation angles and poses (USED FOR UNICYCLE DYNAMICS ONLY)
@@ -90,13 +108,14 @@ else:
 Ts = 0.05
 
 # create simulation
-simulation = FleetSimulation(fleet, t0=0.0, tf=20.0, dt=Ts)
+simulation = FleetSimulation(fleet, t0=0.0, tf=50.0, dt=Ts)
 
 # create history of potential measurements done by the robots
 potential_measurements = np.zeros((simulation.t.shape[0], nbOfRobots))
 t_index = 0
 verbose = False
 
+control_algo_potential.initialisation(difficulty, random, [kp, kg, kpi, kgi, kto, kr], [limit_min_x, limit_max_x, limit_min_y, limit_max_y, ech_x, ech_y], fenetre)
 
 # simulation loop
 for t in simulation.t:
@@ -168,9 +187,10 @@ simulation.plotCtrl(figNo=6)
 
 simulation.plotXY(figNo=10, steps=50, links=True)
 
+"""
 gridmap_record = control_algo_potential.get_gridmap()
 gridmap_record.plot(t, permanent=False)
-
+"""
 
 relative_pot_found_error, total_distance = evm.eval_metrics(simulation, potential_measurements, pot)
 print('relative error on max potential estimate: ' + str(relative_pot_found_error))

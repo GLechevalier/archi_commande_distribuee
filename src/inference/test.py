@@ -17,3 +17,5 @@ gpr.fit(X_train, y_train)
 
 params = gpr.kernel_.get_params()
 print(params)
+
+print(np.array([1, 2])[:, 0])
