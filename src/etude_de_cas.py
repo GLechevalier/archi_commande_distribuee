@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 # -----------------
 nbOfRobots = 4
 random_poses = True
+tmax = 70.
 
 # dynamics of robots
 # -------------------
@@ -58,7 +59,12 @@ kg = 5
 kpi = 0.1
 kgi = 0.1
 kto = 0.1
+
 kr = 0.5
+kp_r = 3
+kpi_r = 1
+
+krep = 5
 
 fenetre = 10
 # initial states of robots
@@ -78,7 +84,7 @@ if random_poses:
                 40 * np.random.rand() - 20,
             ],  # x-coordinates (m)
             [
-                40 * np.random.rand() - 20,
+                40 * np.random.rand() - 20, 
                 40 * np.random.rand() - 20,
                 40 * np.random.rand() - 20,
                 40 * np.random.rand() - 20,
@@ -108,14 +114,14 @@ else:
 Ts = 0.05
 
 # create simulation
-simulation = FleetSimulation(fleet, t0=0.0, tf=50.0, dt=Ts)
+simulation = FleetSimulation(fleet, t0=0.0, tf=tmax, dt=Ts)
 
 # create history of potential measurements done by the robots
 potential_measurements = np.zeros((simulation.t.shape[0], nbOfRobots))
 t_index = 0
 verbose = False
 
-control_algo_potential.initialisation(difficulty, random, [kp, kg, kpi, kgi, kto, kr], [limit_min_x, limit_max_x, limit_min_y, limit_max_y, ech_x, ech_y], fenetre)
+control_algo_potential.initialisation(nbOfRobots, difficulty, random, [kp, kg, kpi, kgi, kto, kr, kp_r, kpi_r, krep], [limit_min_x, limit_max_x, limit_min_y, limit_max_y, ech_x, ech_y], fenetre)
 
 # simulation loop
 for t in simulation.t:
@@ -171,9 +177,8 @@ for t in simulation.t:
 # plot animation (press [ESC] to abort and close simulation window)
 """
 fig1, ax1 = pot.plot(1)
-simulation.animation(figNo=1, potential=pot, pause=0.001, robot_scale=0.2, xmin=-25, xmax=25, ymin=-25, ymax=25)   
+simulation.animation(figNo=1, potential=pot, pause=0.001, robot_scale=0.2, xmin=-25, xmax=25, ymin=-25, ymax=25)
 """
-
 # plot 2D trajectories
 simulation.plotXY(figNo=2, potential=pot, xmin=-25, xmax=25, ymin=-25, ymax=25)
 
@@ -187,10 +192,7 @@ simulation.plotCtrl(figNo=6)
 
 simulation.plotXY(figNo=10, steps=50, links=True)
 
-"""
-gridmap_record = control_algo_potential.get_gridmap()
-gridmap_record.plot(t, permanent=False)
-"""
+control_algo_potential.visu_solution()
 
 relative_pot_found_error, total_distance = evm.eval_metrics(simulation, potential_measurements, pot)
 print('relative error on max potential estimate: ' + str(relative_pot_found_error))

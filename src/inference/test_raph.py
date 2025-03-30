@@ -5,7 +5,9 @@ import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 
 class LawEstimator_data:
-    def __init__(self):
+    def __init__(self, N):
+        self.N = N
+        
         self.L = None  # Données filtrées utilisées pour le fit
         self.data = None  # Intensités filtrées
         self.L_original = None  # Sauvegarde des données brutes
@@ -23,8 +25,19 @@ class LawEstimator_data:
         self.confirmed.append((amp, gauss))
         
 
-    def update(self, pos, particle_intensity_value):
-        """Ajoute de nouvelles données (positions et intensités)."""
+    def update(self, pos, particle_intensity_value, max_data_size=10000):
+        """Ajoute de nouvelles données et applique un nettoyage périodique si besoin.
+        
+        - Si les données dépassent max_data_size, on applique un filtre :
+        * On supprime les N premiers points,
+        * Puis on garde les N suivants, et ainsi de suite.
+        
+        Arguments :
+            pos : np.array (2, M) - Positions des nouvelles mesures.
+            particle_intensity_value : np.array (1, M) - Valeurs d'intensité des particules.
+            max_data_size : int - Nombre maximum de points avant déclenchement du nettoyage.
+        """
+        
         if self.L_original is None:
             self.L_original = pos.T  # (2, N)
         else:
@@ -38,6 +51,26 @@ class LawEstimator_data:
         # Mettre à jour L et data pour qu'ils soient identiques aux données brutes
         self.L = np.copy(self.L_original)
         self.data = np.copy(self.data_original)
+
+        # Vérifier si le nombre de points dépasse la limite
+        if self.L.shape[1] > max_data_size:
+            print(f"Nettoyage des données : {self.L.shape[1]} points -> réduction.")
+
+            # Création d'une liste d'indices à conserver selon le schéma [Supprimer N, garder N]
+            indices_to_keep = np.array([
+                i for i in range(self.L.shape[1]) 
+                if (i // self.N) % 2 == 1  # Supprime les N premiers, garde les N suivants
+            ])
+
+            # Appliquer le filtrage
+            self.L_original = self.L_original[:, indices_to_keep]
+            self.data_original = self.data_original[:, indices_to_keep]
+
+            # Mettre à jour les données finales
+            self.L = np.copy(self.L_original)
+            self.data = np.copy(self.data_original)
+
+            print(f"Données réduites à {self.L.shape[1]} points.")
 
     def declare_center(self, x0, y0):
         """Déclare le centre fixe de la gaussienne."""
@@ -64,8 +97,10 @@ class LawEstimator_data:
         self.L = self.L_original[:, mask]
         self.data = self.data_original[:, mask]
 
+        self.n_don = mask.sum()
         if self.verbose:
             print(f"{mask.sum()} points conservés après filtrage sur distance pour inférence.")
+            
 
     def search_zones(self, eps=0.3, min_samples=2):
         """
@@ -85,7 +120,7 @@ class LawEstimator_data:
         # Vérification des données
         if self.L_original is None or self.data_original is None or self.L_original.shape[1] < 1:
             print("Pas de données disponibles pour la recherche de zones.")
-            return []
+            return [], []
 
         # Extraction des coordonnées et valeurs mesurées
         x_data, y_data = self.L_original[0, :], self.L_original[1, :]
@@ -108,7 +143,7 @@ class LawEstimator_data:
 
         if len(filtered_x) == 0:
             print("Aucune zone détectée avec un ratio < 0.98.")
-            return []
+            return [], []
 
         # Formation des clusters avec DBSCAN
         points = np.column_stack((filtered_x, filtered_y))
@@ -148,7 +183,7 @@ class LawEstimator_data:
         ])
 
         # Vérification : rendre la matrice définie positive
-        if np.linalg.det(cov_matrix) <= 0:
+        if np.linalg.det(cov_matrix) <= 1e-4:
             sigma_xy = 0  # Éliminer la corrélation problématique
             cov_matrix = np.array([[sigma_x, 0.], [0., sigma_y]])
             
@@ -167,7 +202,7 @@ class LawEstimator_data:
         g = 310. + np.log10(value + 1e-309)        
         return g
 
-    def fit(self, apply_filter=True, estimation_max=310., verbose = True):
+    def fit(self, apply_filter=True, estimation_max=310., pre_estimation=None, verbose = True):
         """Ajuste les paramètres en gardant x0 et y0 fixes, avec augmentation du nombre max d'itérations."""
         if self.L_original is None or self.data_original is None or self.L_original.shape[1] < 10:
             print("Pas assez de données pour ajuster.")
@@ -178,12 +213,18 @@ class LawEstimator_data:
             return None
 
         # Valeurs initiales
-        initial_guess = (self.x0, self.y0, np.power(10, estimation_max - 310.), 1, 1, 0)
-        bounds = ([self.x0 - 0.1, self.y0 - 0.1, 0, 1e-6, 1e-6, 0], [self.x0 + 0.1, self.y0 + 0.1, np.inf, 3, 3, 3])
+        if pre_estimation:
+            initial_guess = (self.x0, self.y0, pre_estimation, 1, 1, 0)
+        else:
+            initial_guess = (self.x0, self.y0, np.power(10, estimation_max - 310.), 1, 1, 0)
+            
+        bounds = ([self.x0 - 0.1, self.y0 - 0.1, 0, 1e-2, 1e-2, 0], [self.x0 + 0.1, self.y0 + 0.1, np.inf, 3, 3, 3])
+        self.n_don = 0
 
         continuer = True
         max_distance = 1
-        r_save = -1
+        r_save = -10
+        dis_save = 1
         while continuer:
             
             # Appliquer le filtrage par distance si demandé
@@ -201,7 +242,7 @@ class LawEstimator_data:
                     y_data,
                     p0=initial_guess,
                     bounds=bounds,
-                    maxfev=5000
+                    maxfev=1000
                 )
 
                 
@@ -213,14 +254,15 @@ class LawEstimator_data:
 
             except RuntimeError:
                 print("Échec de l'optimisation : essaye avec des valeurs initiales différentes.")
-                self.r_squared = -1
+                self.r_squared = -10
             
-            max_distance += 0.5
-            if (r_save > self.r_squared) or (max_distance > 25):
+            if ((r_save > self.r_squared) and (max_distance >= 2)) or (max_distance > 15):
                 self.r_squared = r_save
                 continuer = False
                 
-            elif (self.r_squared >= 0.99): # and (max_distance > 5):
+            elif (self.r_squared >= 0.99) and (max_distance >= 2):
+                dis_save = max_distance
+                
                 self.x0 = popt[0]
                 self.y0 = popt[1]
                 
@@ -236,52 +278,61 @@ class LawEstimator_data:
             
                 continuer = False
                 
-            else:
-                r_save = self.r_squared
-                
-                if self.r_squared != -1:
-                    # Stockage des paramètres optimisés
-                    self.x0 = popt[0]
-                    self.y0 = popt[1]
-                    
-                    self.popt_dict = {
-                        "amplitude": popt[2],
-                        "xo": popt[0],
-                        "yo": popt[1],
-                        "sigma_x": popt[3],
-                        "sigma_y": popt[4],
-                        "sigma_xy": popt[5],
-                    }
-                
-                    initial_guess = (popt[0], popt[1], popt[2], abs(popt[3]), abs(popt[4]), popt[5])
-                    bounds = ([popt[0] - 0.1, popt[1] - 0.1, 0, 1e-6, 1e-6, 0.], [popt[0] + 0.1, popt[1] + 0.1, np.inf, 3, 3, 3])
-                    
+            elif (r_save > self.r_squared):
+                # Résolution d'un problème de sur-confiance en peu de données
+                if self.n_don < 50:
+                    r_save = self.r_squared - 0.2
+                elif (self.n_don < 150) or (max_distance < 2):
+                    r_save = self.r_squared - 0.05
                 else:
-                    # Stockage des paramètres optimisés
-                    self.popt_dict = {
-                        "amplitude": initial_guess[2],
-                        "xo": self.x0,
-                        "yo": self.y0,
-                        "sigma_x": 1,
-                        "sigma_y": 1,
-                        "sigma_xy": 0,
-                    }
+                    r_save = self.r_squared
+
+                dis_save = max_distance
+                
+                self.x0 = popt[0]
+                self.y0 = popt[1]
+                
+                self.popt_dict = {
+                    "amplitude": popt[2],
+                    "xo": popt[0],
+                    "yo": popt[1],
+                    "sigma_x": popt[3],
+                    "sigma_y": popt[4],
+                    "sigma_xy": popt[5],
+                }
+            
+                initial_guess = (popt[0], popt[1], popt[2], abs(popt[3]), abs(popt[4]), popt[5])
+                bounds = ([popt[0] - 0.1, popt[1] - 0.1, 0, 1e-2, 1e-2, 0.], [popt[0] + 0.1, popt[1] + 0.1, np.inf, 3, 3, 3])
+                
+            elif (r_save == -10):
+                # Stockage des paramètres optimisés
+                self.popt_dict = {
+                    "amplitude": initial_guess[2],
+                    "xo": self.x0,
+                    "yo": self.y0,
+                    "sigma_x": 1,
+                    "sigma_y": 1,
+                    "sigma_xy": 0,
+                }
+                
+            max_distance += 0.5
                     
         if verbose:     
-            print("Rayon d'inférence :", max_distance)
+            print("Rayon d'inférence :", dis_save)
             print("Paramètres ajustés :", self.popt_dict)
             print(f"Score R² pred: {self.r_squared:.4f}")
-            self.plot_fit()
             
-        # Calcul du score R²
-        x_data = np.copy(self.L_original).T  # (N, 2)
-        y_data = np.copy(self.data_original).ravel()  # (N,)
-        y_pred = self.twoD_Gaussian_fixed(x_data, *popt)
-        ss_total = np.sum((y_data - np.mean(y_data)) ** 2)
-        ss_residual = np.sum((y_data - y_pred) ** 2)
-        r_tot = 1 - (ss_residual / ss_total)
-        
-        print(f"Score R² total: {r_tot:.4f}")
+            #self.plot_fit()
+            
+            # Calcul du score R²
+            x_data = np.copy(self.L_original).T  # (N, 2)
+            y_data = np.copy(self.data_original).ravel()  # (N,)
+            y_pred = self.twoD_Gaussian_fixed(x_data, *popt)
+            ss_total = np.sum((y_data - np.mean(y_data)) ** 2)
+            ss_residual = np.sum((y_data - y_pred) ** 2)
+            r_tot = 1 - (ss_residual / ss_total)
+            
+            print(f"Score R² total: {r_tot:.4f}")
             
         
     
@@ -296,59 +347,85 @@ class LawEstimator_data:
             
         gaussian_sol = multivariate_normal([self.x0, self.y0], cov_matrix)
         
-        return np.array([self.x0, self.y0]), self.popt_dict["amplitude"], gaussian_sol, self.r_squared
+        return np.array([self.x0, self.y0]), self.popt_dict["amplitude"], gaussian_sol, self.r_squared, cov_matrix
     
       
-    def plot_fit(self, colorbar=True):
-        """Affiche la gaussienne ajustée en utilisant les mêmes méthodes que la génération du champ potentiel."""
+    def plot_fit(self, colorbar = True, fit_actuel = True):
+        """Affiche deux subplots :
+        - 1er subplot : Solution totale avec toutes les sources confirmées.
+        - 2e subplot : Source détectée actuellement.
+        """
 
         if not hasattr(self, "popt_dict"):
             print("Aucun fit trouvé. Exécute d'abord `fit()`.")
             return
+        
+        _, amp_fit, gauss_fit, _, _ = self.get_solution()
 
-       # Définition des bornes de l'espace de visualisation
+        # Définition des bornes de l'espace de visualisation
         self.xmin, self.xmax, self.xstep = -25, 25, 0.5
         self.ymin, self.ymax, self.ystep = -25, 25, 0.5
 
         # Grille des points
         x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
         pos = np.dstack((x, y))
+
+        if fit_actuel:
+            # Création de la figure et des subplots
+            fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+            ax0 = axes[0]
         
-        # Matrice de covariance
-        cov_matrix = np.array([[self.popt_dict["sigma_x"], self.popt_dict["sigma_xy"]], [self.popt_dict["sigma_xy"], self.popt_dict["sigma_y"]]])
-
-        # Vérification : rendre la matrice définie positive
-        if np.linalg.det(cov_matrix) <= 0:
-            cov_matrix = np.array([[self.popt_dict["sigma_x"], 0.], [0., self.popt_dict["sigma_y"]]])
-            
-        gaussian_sol = multivariate_normal([self.x0, self.y0], cov_matrix)
+        else:
+            fig, ax0 = plt.subplots(1, 1, figsize=(6, 6))
         
-        # Remplacement de `self.value(pos)` par l'utilisation de la fonction ajustée
-        potentialFieldForPlot = 310. + np.log10(self.popt_dict["amplitude"]*gaussian_sol.pdf(pos) + 1e-309)
+        
+        # === 1er SUBPLOT : SOLUTION TOTALE AVEC TOUTES LES SOURCES ===
+        total_field = amp_fit*gauss_fit.pdf(pos)
 
-        # Création de la figure si nécessaire
-        fig = plt.figure(30)
-        fig.clf()
-        ax = fig.add_subplot(111)
+        for source_conf in self.confirmed:
+            amplitude, source_gaussian = source_conf
+            total_field += amplitude * source_gaussian.pdf(pos)
 
-        # Contour du champ potentiel ajusté
-        cs = ax.contourf(x, y, potentialFieldForPlot, 20, cmap='BrBG')
+        # Transformation logarithmique
+        potential_total = 310. + np.log10(total_field + 1e-309)
+        
+        cs1 = ax0.contourf(x, y, potential_total, 20, cmap='BrBG')
 
-        # Ajout des points de données
-        if hasattr(self, "L"):
-            x_values, y_values = self.L
-            ax.scatter(x_values, y_values, color="red", s=5, label="Données utilisées")
+        # Affichage des centres confirmés
+        for source_conf in self.confirmed:
+            _, source_gaussian = source_conf
+            mean_x, mean_y = source_gaussian.mean
+            ax0.scatter(mean_x, mean_y, c="black", marker="x", s=100, label="Sources confirmées")
 
-        # Affichage du centre fixé
-        ax.scatter(self.x0, self.y0, c="white", marker="x", s=100, label="Centre fixé")
+        ax0.set_xlabel("X")
+        ax0.set_ylabel("Y")
+        ax0.set_title("Solution Totale avec Sources Confirmées")
+        ax0.legend()
 
-        # Ajout d'une barre de couleur si demandé
         if colorbar:
-            fig.colorbar(cs)
+            fig.colorbar(cs1, ax=ax0)
 
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.legend()
-        ax.set_title(f"Fit Gaussien 2D (R²={self.r_squared:.4f})")
+        if fit_actuel:
+            # === 2e SUBPLOT : SOURCE ACTUELLE & SOURCES CONFIRMÉES INDIVIDUELLEMENT ===
+            axes[1].set_title("Source Actuelle")
+            
+            current_field = 310. + np.log10(amp_fit*gauss_fit.pdf(pos) + 1e-309)
 
+            # Affichage de la source actuelle
+            cs2 = axes[1].contourf(x, y, current_field, 20, cmap='BrBG')
+                
+            # Ajout des points de données
+            if hasattr(self, "L"):
+                x_values, y_values = self.L
+                axes[1].scatter(x_values, y_values, color="red", s=5, label="Données utilisées")
+
+            axes[1].set_xlabel("X")
+            axes[1].set_ylabel("Y")
+            axes[1].legend()
+
+            if colorbar:
+                fig.colorbar(cs2, ax=axes[1])
+
+        # Ajustement de l'affichage
+        plt.tight_layout()
         plt.pause(0.1)

@@ -37,7 +37,7 @@ global pot # DO NOT MODIFY - allows initialisation of potential function from th
 global controleur
 
 class Controleur():
-    def __init__(self, pot, params, limits, fenetre:int):
+    def __init__(self, N, pot, params, limits, fenetre:int):
         self.phase = 1
         self.pot = pot
         
@@ -47,14 +47,19 @@ class Controleur():
         self.gridmap_record = gridmap(limits[0], limits[1], limits[2], limits[3], limits[4], limits[5])
         self.radius = 1
         
-        self.law_est = LawEstimator_data()
+        self.law_est = LawEstimator_data(N)
         
         self.kp = params[0]
         self.kg = params[1]
         self.kpi = params[2]
         self.kgi = params[3]
         self.kto = params[4]
+        
         self.kr = min(0.99, params[5])/(1 - min(0.99, params[5]))
+        
+        self.kp_r = params[5]
+        self.kpi_r = params[6]
+        self.krep = params[7]
         
         self.t = -1
         self.source_verif = 0
@@ -97,6 +102,7 @@ class Controleur():
         sum_distances = 0.
         vel_vector = np.zeros(2)
         grad_total  = np.zeros(2)
+        vector_rep =  np.zeros(2)
         
         for i in range(N):
             if i != robotNo:
@@ -109,27 +115,46 @@ class Controleur():
                 dist = np.linalg.norm(x[robotNo, :] - np.array([0, 0]))
                 vel_vector += (1/dist)*(np.array([0, 0]) - x[robotNo, :])
 
+        # Calcul du gradient local à partir de la formation
         for i in range(N):
             for j in range(N):
                 if i != j:
                     grad_local = (measurement[i] - measurement[j]) / np.linalg.norm(x[i, :] - x[j, :])
                     grad_total +=  np.array([grad_local*(x[j, 0] - x[i, 0]), grad_local*(x[j, 1] - x[i, 1])])
         
-        # initialize control input vector for current robot i
+        
+        
+        # Calcul du poids du contrôle pour le consensus
         dist_consensus = np.linalg.norm(vel_vector)
         if dist_consensus < 1e-8:
             factor_consensus = 0
         else:
             factor_consensus = self.kp*np.arctan(self.kpi*dist_consensus)/dist_consensus
         
+        # Cacul du poids du contrôle pour la descente de gradient
         dist_grad = np.linalg.norm(grad_total)
         if dist_grad < 1e-8:
             factor_grad = 0
         else:
             factor_grad = (self.kg*np.arctan(self.kgi*dist_grad)/dist_grad)*(np.pi - 2*np.arctan(self.kto*sum_distances))/(np.pi)
         
+        # Calcul du vecteur de repoussement
+        for source in self.detected_sources.values():
+            vector_rep_tmp = x[robotNo, :] - source[0] # Le robot est repoussé par les sources déjà découvertes
+            
+            # Calcul du poids du contrôle pour l'évitement des zones déjà couvertes
+            dist_rep_tmp = np.linalg.norm(vector_rep_tmp)
+            if dist_rep_tmp < 1e-2:
+                vector_rep += np.array([0, 1]) # Si on est sur la soource on doit bouger rapidement (n'arrive normalement jamais)
+            else:
+                ratio = 1 - (self.prev(x[robotNo, :]) / measurement[robotNo])
+                factor_rep_tmp = (np.pi - 2*np.arctan(200*ratio))/(np.pi)
+                
+                vector_rep += factor_rep_tmp*vector_rep_tmp
+        
+        
         #print(dist_consensus, factor_consensus, dist_grad, factor_grad)
-        v = (factor_consensus*vel_vector - factor_grad*grad_total) #*(np.pi - 2*np.arctan((measurement[robotNo] - min(measurement))*pi))/(np.pi)
+        v = (factor_consensus*vel_vector - factor_grad*grad_total + self.krep*vector_rep) #*(np.pi - 2*np.arctan((measurement[robotNo] - min(measurement))*pi))/(np.pi)
         
         # Regarde le mouvement de la formation entière à partir du mouvement du centre
         dist_mouv = 10
@@ -149,18 +174,31 @@ class Controleur():
             
         if (sum_distances < 1.) and (dist_mouv < 0.05):
             for source in self.detected_sources.values():
-                if np.linalg.norm(source[0] - center_formation) < 0.5:
-                    break
+                if np.linalg.norm(source[0] - center_formation) < 0.5: ## On repart sur une phase de recherche car on est retombé sur la même source
+                    self.confirmed = True
+                    self.mesured = True
+                    self.first = True
+                    self.cnt = 0
+                    self.last = 0
+                    
+                    self.phase = 2
+                    for (id, source_test) in self.detected_sources.items():
+                        if np.linalg.norm(source[0] - source_test[0]) < 1e-3:
+                            self.source_verif = id
+                    self.radius = 1.
+                    
+                    self.zones_recherche = None
+
             
-            else:
+            else: # On a trouver une nouvelle source, on essaye d'estimer sa diffusion, puis on part à la recherche d'une nouvelle
                 self.law_est.declare_center(np.mean(x[:, 0]), np.mean(x[:, 1]))
                 self.law_est.fit(estimation_max=max(measurement))
                 
-                center, amp, gauss, r = self.law_est.get_solution()
+                center, amp, gauss, r, cov = self.law_est.get_solution()
                 #self.pot.plot_essai(amp, gauss)
                 
                 id = len(self.detected_sources) + 1
-                self.detected_sources[id] = [center, amp, gauss, r]
+                self.detected_sources[id] = [center, amp, gauss, r, cov]
                 print("source détéctée", center, " à t=", t)
                 self.phase = 2
                 self.source_verif = id
@@ -168,7 +206,9 @@ class Controleur():
                     
                 self.confirmed = False
                 self.mesured = False
+                self.first = True
                 self.cnt = 0
+                self.last = 0
                 
                 self.zones_recherche = None
 
@@ -186,55 +226,49 @@ class Controleur():
         
         sum_distances = 0.
         vel_vector = np.zeros(2)
-        self.kp_r = 3
-        self.kpi_r = 1
         
         if robotNo == N-1:
             
             vel_vector = self.detected_sources[self.source_verif][0] - x[robotNo, :]
             
-            if np.linalg.norm(vel_vector) < 0.01:
+            if np.linalg.norm(vel_vector) < 0.001:
                 self.mesured = True
 
             if self.radius < 15.:
-                self.radius += 0.3
+                # Adaptation de la vitesse de croissance
+                rad = sum(np.linalg.norm(x[robotNo, :] - x[i, :]) for i in range(N-1))/(N-1)
+                if (self.radius - rad) < 2.0:
+                    self.radius += 0.3
                 
                 if not self.confirmed:
-                    self.law_est.fit(estimation_max=max(measurement), verbose = False)
-                    center, amp, gauss, r = self.law_est.get_solution()
                     
-                    if r > self.detected_sources[self.source_verif][3]:
-                        self.detected_sources[self.source_verif] = [center, amp, gauss, r]
-                        print("Sources affinées: ", self.detected_sources)
+                    if self.last > 5:
+                        self.law_est.fit(pre_estimation = self.detected_sources[self.source_verif][1], verbose = False)
+                        center, amp, gauss, r, cov = self.law_est.get_solution()
+                        self.last = 0
+                        
+                        if r > self.detected_sources[self.source_verif][3]:
+                            self.detected_sources[self.source_verif] = [center, amp, gauss, r, cov]
+                            print("Sources affinées: ", ["id:" + str(id) + " amp-" + str(det_sources[1]) + " (x, y)-(" + str(det_sources[0][0]) + ", " + str(det_sources[0][1]) +
+                                                         ") sigma- " + str(det_sources[4][0, 0]) + ", " + str(det_sources[4][1, 1]) + ", " + str(det_sources[4][0, 1])
+                                                         for (id, det_sources) in self.detected_sources.items()])
+                        
+                        if self.detected_sources[self.source_verif][3] > 0.999 and self.mesured:
+                            self.law_est.declare_confirmed(self.detected_sources[self.source_verif][1], self.detected_sources[self.source_verif][2])
+                            self.confirmed = True
                     
-                    if r > 0.9999 and self.mesured:
-                        self.law_est.declare_confirmed(amp, gauss)
-                        self.confirmed = True
+                    else:
+                        self.last += 1
+                    
                     
             elif not self.confirmed:
-                center, amp, gauss, r = self.law_est.get_solution()
+                print("Confirmation: ", ["id:" + str(id) + " amp-" + str(det_sources[1]) + " (x, y)-(" + str(det_sources[0][0]) + ", " + str(det_sources[0][1]) +
+                                                         ") sigma-" + str(det_sources[4][0, 0]) + ", " + str(det_sources[4][0, 1]) + ", " + str(det_sources[4][1, 1])
+                                                         for (id, det_sources) in self.detected_sources.items()])
+                center, amp, gauss, r, _ = self.law_est.get_solution()
                 
                 self.law_est.declare_confirmed(amp, gauss)
                 self.confirmed = True
-            
-            if self.confirmed and self.mesured:
-                zones_suspectes, valeurs = self.law_est.search_zones()
-                print("Zones", zones_suspectes, valeurs)
-                                                 
-                if (len(zones_suspectes) > 0) or self.cnt > 20:
-                    i_max = 0
-                    score_max = 0
-                    for i in range(len(zones_suspectes)):
-                        score = valeurs[i] + 200*(np.pi - 2*np.arctan(0.5*np.linalg.norm(self.detected_sources[self.source_verif][0] - zones_suspectes[i])))/(np.pi)
-                        if score > score_max:
-                            i_max = i
-                            
-                    self.zones_recherche = zones_suspectes[i_max]
-                    self.radius = 1
-                    self.phase = 3
-                
-                elif self.radius > 15.:
-                    self.cnt += 1
 
         else:
             for i in range(N):
@@ -248,6 +282,46 @@ class Controleur():
             norm = np.linalg.norm(vel_vector)
             if dist > 1e-8:    
                 vel_vector += self.kr*(norm/dist)*(x[(robotNo + 1)%(N-1), :] - x[robotNo, :])
+        
+        if self.confirmed and self.mesured:
+            if self.first:
+                self.first = False
+                zones_suspectes, valeurs = self.law_est.search_zones()
+                print("Zones", zones_suspectes, valeurs)
+                
+                #self.pot.plot_essai(self.detected_sources[self.source_verif][1], self.detected_sources[self.source_verif][2])
+                
+                if (len(zones_suspectes) > 0):
+                    i_max = 0
+                    score_max = 0
+                    for i in range(len(zones_suspectes)):
+                        score = valeurs[i] + 200*(np.pi - 2*np.arctan(0.5*np.linalg.norm(self.detected_sources[self.source_verif][0] - zones_suspectes[i])))/(np.pi)
+                        if score > score_max:
+                            i_max = i
+                
+                    self.zones_recherche = (zones_suspectes[i_max], valeurs[i_max])
+                    self.radius = 1
+                    self.phase = 3
+                    
+                    print("Regroupement:", self.zones_recherche)
+            
+            else:
+                ratio = (self.prev(x[robotNo, :]) / measurement[robotNo])
+                if (ratio < 0.96)  or (ratio > 1.1):
+                    self.zones_recherche = (x[robotNo, :], measurement[robotNo])
+                    self.radius = 1
+                    self.phase = 3
+                    
+                    print("Regroupement:", self.zones_recherche)
+                
+                elif self.radius > 15.:
+                    self.cnt += 1
+                
+                    if self.cnt > 20:
+                        self.radius = 1
+                        self.phase = 3
+                        
+                        print("Regroupement:", self.zones_recherche)
         
         # initialize control input vector for current robot i
         dist_consensus = np.linalg.norm(vel_vector)
@@ -269,14 +343,15 @@ class Controleur():
         if self.zones_recherche is None:
             v = np.zeros(2)
         else:
+            if ((self.prev(x[robotNo, :]) / measurement[robotNo]) < 0.98) and (measurement[robotNo] > self.zones_recherche[1]): # Si on trouve un meilleur point durant le regroupement
+                self.zones_recherche = (x[robotNo, :], measurement[robotNo])
+                
             formation_distance = self.radius
             relative_pose = np.array([[formation_distance*np.sin(2*np.pi*i/N) for i in range(N)],       # x-coordinates (m)
                                         [formation_distance*np.cos(2*np.pi*i/N) for i in range(N)]]).T   # y-coordinates (m)
             
             sum_distances = 0.
             vel_vector = np.zeros(2)
-            self.kp_r = 3
-            self.kpi_r = 1
             
             center_formation = np.array([np.mean(x[:, 0]), np.mean(x[:, 1])])
             for i in range(N):
@@ -286,9 +361,8 @@ class Controleur():
                     sum_distances += max((dist - dist_rel)/self.radius, 0)
                     vel_vector += ((dist - dist_rel)/dist)*(x[i, :] - x[robotNo, :])
             
-            dist = np.linalg.norm(x[robotNo, :] - self.zones_recherche[0])
-            sum_distances += abs((dist - np.linalg.norm(relative_pose[robotNo, :]))/self.radius)
-            vel_vector += ((dist -  np.linalg.norm(relative_pose[robotNo, :]))/dist)*(self.zones_recherche[0] - x[robotNo, :])
+            sum_distances += abs((dist - np.linalg.norm(relative_pose[robotNo, :]))/self.radius) # prendre en compte le fait d'arriver au niveau de l'objectif
+            vel_vector += self.zones_recherche[0] - center_formation
             
             # initialize control input vector for current robot i
             dist_consensus = np.linalg.norm(vel_vector)
@@ -299,8 +373,10 @@ class Controleur():
             
             v = factor_consensus*vel_vector
             
-            if (sum_distances < 0.5):
-                self.phase = 1            
+            if (sum_distances < 1.5) and (np.linalg.norm(self.zones_recherche[0] - center_formation) < 0.5):
+                self.phase = 1 
+                
+                print("Descente de gradient")         
 
         # .................  TO BE COMPLETED HERE .............................
         return v
@@ -309,7 +385,7 @@ class Controleur():
 
 # =============================================================================
 
-def initialisation(difficulty=3, random=False, params = [2, 5, 0.1, 0.1, 0.1, 0.5], limits=[-25, 25, -25, 25, 0.5, 0.5], fenetre = 5):
+def initialisation(N, difficulty=3, random=False, params = [2, 5, 0.1, 0.1, 0.1, 0.5], limits=[-25, 25, -25, 25, 0.5, 0.5], fenetre = 5):
     
     global pot
     global firstCall
@@ -318,7 +394,7 @@ def initialisation(difficulty=3, random=False, params = [2, 5, 0.1, 0.1, 0.1, 0.
     pot = Potential(difficulty=difficulty, random=random) 
     pot.get_truth()
     
-    controleur = Controleur(pot, params, limits, fenetre)
+    controleur = Controleur(N, pot, params, limits, fenetre)
     
     firstCall = False
     # --------------------------------
@@ -378,75 +454,8 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     return ui[0], ui[1], pot   # potential is also returned to be used by main script for displays (DO NOT MODIFY)
 # =============================================================================
 
-# general template of a function defining a control law
-# =============================================================================
-def unitaire_gradient(t, robotNo, N, x, measurement):
-# ============================================================================= 
+def visu_solution():
+    global controleur
     
-    global detected_sources
-    global law_est
-    global phase
-
-    formation_distance = 1
-    relative_pose = np.array([[formation_distance*np.sin(2*np.pi*i/N) for i in range(N)],       # x-coordinates (m)
-                                [formation_distance*np.cos(2*np.pi*i/N) for i in range(N)]]).T   # y-coordinates (m)
-    
-    sum_distances = 0.
-    vel_vector = np.zeros(2)
-    grad_total  = np.zeros(2)
-    
-    for i in range(N):
-        if i != robotNo:
-            dist = np.linalg.norm(x[robotNo, :] - x[i, :])
-            dist_rel = np.linalg.norm(relative_pose[robotNo, :] - relative_pose[i, :])
-            sum_distances += max(dist - dist_rel, 0)
-            vel_vector += ((dist - dist_rel)/dist)*(x[i, :] - x[robotNo, :])
-            
-        if measurement[robotNo] == -10: ## Correction in order to go toward the center of the field if all the robots are too far from sources
-            dist = np.linalg.norm(x[robotNo, :] - np.array([0, 0, 0]))
-            vel_vector += (1/dist)*(np.array([0, 0, 0] - x[robotNo, :]))
-
-    for i in range(N):
-        for j in range(N):
-            if i != j:
-                grad_local = (measurement[i] - measurement[j]) / np.linalg.norm(x[i, :] - x[j, :])
-                grad_total +=  np.array([grad_local*(x[j, 0] - x[i, 0]), grad_local*(x[j, 1] - x[i, 1])])
-    
-    # initialize control input vector for current robot i
-    kp = 1.5
-    kg = 5
-    kgi = 0.3
-    kto = 0.1
-    pi = 0.1
-    dist_consensus = np.linalg.norm(vel_vector)
-    factor_consensus = kp*np.arctan(dist_consensus)/dist_consensus
-    
-    dist_grad = np.linalg.norm(grad_total)
-    if dist_grad < 0.0001:
-        factor_grad = 0
-    else:
-        factor_grad = (kg*np.arctan(kgi*dist_grad)/dist_grad)*(np.pi - 2*np.arctan(sum_distances*kto))/(np.pi)
-    
-    v = (factor_consensus*vel_vector - factor_grad*grad_total)*(np.pi - 2*np.arctan((measurement[robotNo] - min(measurement))*pi))/(np.pi)
-    if t == 10.:
-        print(sum_distances, dist_grad)
-    
-    #print(dist_grad)
-    if (sum_distances < 1.) and (dist_grad < 0.05):
-        potential_source = np.array([np.mean(x[:, 0]), np.mean(x[:, 1])])
-        for source in detected_sources:
-            if np.linalg.norm(source - potential_source) < 0.1:
-                break
-        
-        else:
-            law_est.declare_center(np.mean(x[:, 0]), np.mean(x[:, 1]))
-            law_est.fit()
-            #plot_fit(law_est, xmin=-25, xmax=25, ymin=-25, ymax=25, xstep=0.1, ystep=0.1)
-            detected_sources.append(potential_source)
-            print("source détéctée", potential_source)
-            #phase = 2
-
-    # .................  TO BE COMPLETED HERE .............................
-    return v
-# =============================================================================
+    controleur.law_est.plot_fit(fit_actuel=False)
 

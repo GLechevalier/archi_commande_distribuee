@@ -161,9 +161,9 @@ class Potential:
         pos = np.dstack((x, y))
         potentialFieldForPlot = self.value(pos)
         
-        potential1 = 310. + np.log10(self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
-        potential2 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + 1e-309)
-        potential3 = 310. + np.log10(self.weight[1]*self.distribution[2].pdf(pos) + 1e-309)
+        potential1 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + self.weight[2]*self.distribution[2].pdf(pos) + 1e-309)
+        potential2 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
+        potential3 = 310. + np.log10(self.weight[1]*self.distribution[2].pdf(pos) + self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
         
         ratio1 = np.fmax(potential1 / potentialFieldForPlot, 0.)
         ratio2 = np.fmax(potential2 / potentialFieldForPlot, 0.)
@@ -293,33 +293,6 @@ class Potential:
 
 # ======================== END OF CLASS Potential =============================
 
-def g(x, mu, Sigma, alpha=1.0):
-    """
-    Fonction qui a les mêmes lignes de niveau que le logarithme d'une gaussienne,
-    mais décroît moins vite et se stabilise à 0.
-    
-    Paramètres :
-        x : np.array, vecteur de point où évaluer la fonction
-        mu : np.array, vecteur moyen de la gaussienne
-        Sigma : np.array, matrice de covariance (doit être inversible)
-        alpha : float, paramètre de contrôle de la décroissance
-    
-    Retour :
-        float, valeur de g(x)
-    """
-    diff = x - mu
-    Sigma_inv = np.linalg.inv(Sigma)
-    quad_form = np.dot(diff.T, np.dot(Sigma_inv, diff))
-    return -1 / (1 + alpha * quad_form)
-
-# Exemple d'utilisation
-mu = np.array([0, 0])  # Moyenne en 2D
-Sigma = np.array([[1, 0], [0, 1]])  # Matrice de covariance identitaire
-x = np.array([1, 1])  # Point où évaluer g
-
-g_value = g(x, mu, Sigma, alpha=0.5)
-print("g(x) =", g_value)
-
 
 
 
@@ -329,7 +302,7 @@ if __name__=='__main__':
     
     plt.close()
     
-    pot = Potential(difficulty=3, random=True)
+    pot = Potential(difficulty=3, random=False)
     
     
     fig2, ax2 = pot.plot(2)
