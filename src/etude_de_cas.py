@@ -33,13 +33,16 @@ import matplotlib.pyplot as plt
 # -----------------
 nbOfRobots = 4
 random_poses = True
-tmax = 70.
+tmax = 100.
+
+save = "test"
+replay = True
 
 # dynamics of robots
 # -------------------
 robotDynamics = "unicycle"  # use 'singleIntegrator2D' or 'unicycle'
 difficulty = 3
-random = False
+random = True
 
 # Limits of the space
 # --------------------
@@ -60,13 +63,14 @@ kpi = 0.1
 kgi = 0.1
 kto = 0.1
 
-kr = 0.5
+kr = 0.45
 kp_r = 3
 kpi_r = 1
 
 krep = 5
 
-fenetre = 10
+fenetre = 5
+
 # initial states of robots
 # -------------------------
 
@@ -115,6 +119,14 @@ Ts = 0.05
 
 # create simulation
 simulation = FleetSimulation(fleet, t0=0.0, tf=tmax, dt=Ts)
+
+# plot animation (press [ESC] to abort and close simulation window)
+if replay: # Permet de jouer une simulation
+    pot = simulation.loadSimulation(save)
+    
+    fig1, ax1 = pot.plot(1)
+    simulation.animation(figNo=1, potential=pot, pause=0.001, robot_scale=0.2, xmin=-25, xmax=25, ymin=-25, ymax=25)
+    exit()
 
 # create history of potential measurements done by the robots
 potential_measurements = np.zeros((simulation.t.shape[0], nbOfRobots))
@@ -174,29 +186,28 @@ for t in simulation.t:
     fleet.integrateMotion(Ts)
 
 
-# plot animation (press [ESC] to abort and close simulation window)
-"""
-fig1, ax1 = pot.plot(1)
-simulation.animation(figNo=1, potential=pot, pause=0.001, robot_scale=0.2, xmin=-25, xmax=25, ymin=-25, ymax=25)
-"""
 # plot 2D trajectories
-simulation.plotXY(figNo=2, potential=pot, xmin=-25, xmax=25, ymin=-25, ymax=25)
+simulation.plotXY(figNo=2, potential=pot, xmin=-25, xmax=25, ymin=-25, ymax=25, save=save)
 
 # plot states' components Vs time
-simulation.plotState(figNo=3)
+simulation.plotState(figNo=3, save=save)
 
 # plot control inputs' components Vs time
-simulation.plotCtrl(figNo=6)
+simulation.plotCtrl(figNo=6, save=save)
 
 # plot 2D trajectories (every 'X steps' time instants
 
-simulation.plotXY(figNo=10, steps=50, links=True)
+simulation.plotXY(figNo=10, steps=50, links=True, save=save)
 
-control_algo_potential.visu_solution()
+control_algo_potential.visu_solution(save)
 
-relative_pot_found_error, total_distance = evm.eval_metrics(simulation, potential_measurements, pot)
+relative_pot_found_error, total_distance, dist_max = evm.eval_metrics(simulation, potential_measurements, pot)
 print('relative error on max potential estimate: ' + str(relative_pot_found_error))
+print('distance parcourue pour trouver le maximum: ' + str(dist_max))
 print('total distance: ' + str(total_distance))
+
+simulation.saveSimulation(save)
+pot.savePotentialMu(save)
 
 
 # plot time history of potential measurements done by the robots and maximum value to be found

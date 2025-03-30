@@ -24,6 +24,11 @@ class LawEstimator_data:
     def declare_confirmed(self, amp, gauss):
         self.confirmed.append((amp, gauss))
         
+        self.x0 = None
+        self.y0 = None
+        self.popt_dict = None  
+        self.r_squared = None
+        
 
     def update(self, pos, particle_intensity_value, max_data_size=10000):
         """Ajoute de nouvelles données et applique un nettoyage périodique si besoin.
@@ -350,17 +355,19 @@ class LawEstimator_data:
         return np.array([self.x0, self.y0]), self.popt_dict["amplitude"], gaussian_sol, self.r_squared, cov_matrix
     
       
-    def plot_fit(self, colorbar = True, fit_actuel = True):
+    def plot_fit(self, colorbar = True, fit_actuel = True, save = None):
         """Affiche deux subplots :
-        - 1er subplot : Solution totale avec toutes les sources confirmées.
+        - 1er subplot : Solution globale avec toutes les sources confirmées.
         - 2e subplot : Source détectée actuellement.
         """
 
-        if not hasattr(self, "popt_dict"):
-            print("Aucun fit trouvé. Exécute d'abord `fit()`.")
-            return
-        
-        _, amp_fit, gauss_fit, _, _ = self.get_solution()
+        if not hasattr(self, "popt_dict") or (self.popt_dict is None):
+            fit_actuel = False
+            center_fit = None
+            total_field = 0
+        else:
+            center_fit, amp_fit, gauss_fit, _, _ = self.get_solution()
+            total_field = amp_fit*gauss_fit.pdf(pos)
 
         # Définition des bornes de l'espace de visualisation
         self.xmin, self.xmax, self.xstep = -25, 25, 0.5
@@ -380,7 +387,7 @@ class LawEstimator_data:
         
         
         # === 1er SUBPLOT : SOLUTION TOTALE AVEC TOUTES LES SOURCES ===
-        total_field = amp_fit*gauss_fit.pdf(pos)
+        
 
         for source_conf in self.confirmed:
             amplitude, source_gaussian = source_conf
@@ -392,14 +399,22 @@ class LawEstimator_data:
         cs1 = ax0.contourf(x, y, potential_total, 20, cmap='BrBG')
 
         # Affichage des centres confirmés
+        flag = True
         for source_conf in self.confirmed:
             _, source_gaussian = source_conf
             mean_x, mean_y = source_gaussian.mean
-            ax0.scatter(mean_x, mean_y, c="black", marker="x", s=100, label="Sources confirmées")
-
+            if flag:
+                flag = False
+                ax0.scatter(mean_x, mean_y, c="black", marker="x", s=100, label="Sources confirmées")
+            else:
+                ax0.scatter(mean_x, mean_y, c="black", marker="x", s=100)
+                
+        if center_fit is not None:
+            ax0.scatter(center_fit[0], center_fit[1], c="blue", label="Source détéctée")
+                
         ax0.set_xlabel("X")
         ax0.set_ylabel("Y")
-        ax0.set_title("Solution Totale avec Sources Confirmées")
+        ax0.set_title("Estimation globale")
         ax0.legend()
 
         if colorbar:
@@ -429,3 +444,6 @@ class LawEstimator_data:
         # Ajustement de l'affichage
         plt.tight_layout()
         plt.pause(0.1)
+        
+        if save:
+            plt.savefig("Results/"+save+"_Estimation.png")

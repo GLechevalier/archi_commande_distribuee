@@ -211,6 +211,8 @@ class Controleur():
                 self.last = 0
                 
                 self.zones_recherche = None
+                
+        v =  np.zeros(2)
 
         # .................  TO BE COMPLETED HERE .............................
         return v
@@ -233,12 +235,17 @@ class Controleur():
             
             if np.linalg.norm(vel_vector) < 0.001:
                 self.mesured = True
+                
+            # Adaptation de la vitesse de croissance
+            rad = sum(np.linalg.norm(x[robotNo, :] - x[i, :]) for i in range(N-1))/(N-1)
+            if (self.radius < 15.) and (self.radius - rad) < 2.0:
+                self.radius += 0.5
+                
+            if (rad > 14.):
+                self.cnt += 1
 
-            if self.radius < 15.:
-                # Adaptation de la vitesse de croissance
-                rad = sum(np.linalg.norm(x[robotNo, :] - x[i, :]) for i in range(N-1))/(N-1)
-                if (self.radius - rad) < 2.0:
-                    self.radius += 0.3
+            # Affinage de la source étudiée
+            if self.radius < 10.:
                 
                 if not self.confirmed:
                     
@@ -249,11 +256,25 @@ class Controleur():
                         
                         if r > self.detected_sources[self.source_verif][3]:
                             self.detected_sources[self.source_verif] = [center, amp, gauss, r, cov]
-                            print("Sources affinées: ", ["id:" + str(id) + " amp-" + str(det_sources[1]) + " (x, y)-(" + str(det_sources[0][0]) + ", " + str(det_sources[0][1]) +
-                                                         ") sigma- " + str(det_sources[4][0, 0]) + ", " + str(det_sources[4][1, 1]) + ", " + str(det_sources[4][0, 1])
-                                                         for (id, det_sources) in self.detected_sources.items()])
+                            
+                            print("Source affinée:")
+                            det_sources = self.detected_sources[self.source_verif]
+                            x, y = det_sources[0]
+                            amp = det_sources[1]
+                            sigma_xx, sigma_xy, sigma_yy = det_sources[4][0, 0], det_sources[4][0, 1], det_sources[4][1, 1]
+
+                            print(f"\tID: {id}", f" Amplitude: {amp:.2f}", f" Position: (x, y) = ({x:.2f}, {y:.2f})", f" Sigma: ({sigma_xx:.2f}, {sigma_yy:.2f}, {sigma_xy:.2f})", f" R²: {det_sources[3]:.2f}")
                         
                         if self.detected_sources[self.source_verif][3] > 0.999 and self.mesured:
+                            print("Source confirmée:")
+                            det_sources = self.detected_sources[self.source_verif]
+                            x, y = det_sources[0]
+                            amp = det_sources[1]
+                            sigma_xx, sigma_xy, sigma_yy = det_sources[4][0, 0], det_sources[4][0, 1], det_sources[4][1, 1]
+
+                            print(f"\tID: {id}", f" Amplitude: {amp:.2f}", f" Position: (x, y) = ({x:.2f}, {y:.2f})", f" Sigma: ({sigma_xx:.2f}, {sigma_yy:.2f}, {sigma_xy:.2f})", f" R²: {det_sources[3]:.2f}")
+
+                            
                             self.law_est.declare_confirmed(self.detected_sources[self.source_verif][1], self.detected_sources[self.source_verif][2])
                             self.confirmed = True
                     
@@ -261,11 +282,16 @@ class Controleur():
                         self.last += 1
                     
                     
-            elif not self.confirmed:
-                print("Confirmation: ", ["id:" + str(id) + " amp-" + str(det_sources[1]) + " (x, y)-(" + str(det_sources[0][0]) + ", " + str(det_sources[0][1]) +
-                                                         ") sigma-" + str(det_sources[4][0, 0]) + ", " + str(det_sources[4][0, 1]) + ", " + str(det_sources[4][1, 1])
-                                                         for (id, det_sources) in self.detected_sources.items()])
-                center, amp, gauss, r, _ = self.law_est.get_solution()
+            elif not self.confirmed:            
+                center, amp, gauss, r, cov = self.detected_sources[self.source_verif]
+                
+                print("Source confirmée:")
+                det_sources = self.detected_sources[self.source_verif]
+                x, y = center
+                sigma_xx, sigma_xy, sigma_yy = cov[0, 0], cov[0, 1], cov[1, 1]
+
+                print(f"\tID: {id}", f" Amplitude: {amp:.2f}", f" Position: (x, y) = ({x:.2f}, {y:.2f})", f" Sigma: ({sigma_xx:.2f}, {sigma_yy:.2f}, {sigma_xy:.2f})", f" R²: {det_sources[3]:.2f}")
+
                 
                 self.law_est.declare_confirmed(amp, gauss)
                 self.confirmed = True
@@ -280,48 +306,46 @@ class Controleur():
 
             dist = np.linalg.norm(x[robotNo, :] - x[(robotNo + 1)%(N-1), :])
             norm = np.linalg.norm(vel_vector)
+            offset = (np.pi - 2*np.arctan(10*norm))/(np.pi)
             if dist > 1e-8:    
-                vel_vector += self.kr*(norm/dist)*(x[(robotNo + 1)%(N-1), :] - x[robotNo, :])
+                vel_vector += ((self.kr*norm + offset)/dist)*(x[(robotNo + 1)%(N-1), :] - x[robotNo, :])
         
-        if self.confirmed and self.mesured:
-            if self.first:
-                self.first = False
-                zones_suspectes, valeurs = self.law_est.search_zones()
-                print("Zones", zones_suspectes, valeurs)
-                
-                #self.pot.plot_essai(self.detected_sources[self.source_verif][1], self.detected_sources[self.source_verif][2])
-                
-                if (len(zones_suspectes) > 0):
-                    i_max = 0
-                    score_max = 0
-                    for i in range(len(zones_suspectes)):
-                        score = valeurs[i] + 200*(np.pi - 2*np.arctan(0.5*np.linalg.norm(self.detected_sources[self.source_verif][0] - zones_suspectes[i])))/(np.pi)
-                        if score > score_max:
-                            i_max = i
-                
-                    self.zones_recherche = (zones_suspectes[i_max], valeurs[i_max])
-                    self.radius = 1
-                    self.phase = 3
+            if self.confirmed and self.mesured:
+                if self.first:
+                    self.first = False
+                    zones_suspectes, valeurs = self.law_est.search_zones()
+                    print("Zones suspectées", zones_suspectes, valeurs)
                     
-                    print("Regroupement:", self.zones_recherche)
-            
-            else:
-                ratio = (self.prev(x[robotNo, :]) / measurement[robotNo])
-                if (ratio < 0.96)  or (ratio > 1.1):
-                    self.zones_recherche = (x[robotNo, :], measurement[robotNo])
-                    self.radius = 1
-                    self.phase = 3
+                    #self.pot.plot_essai(self.detected_sources[self.source_verif][1], self.detected_sources[self.source_verif][2])
                     
-                    print("Regroupement:", self.zones_recherche)
-                
-                elif self.radius > 15.:
-                    self.cnt += 1
-                
-                    if self.cnt > 20:
+                    if (len(zones_suspectes) > 0):
+                        i_max = 0
+                        score_max = 0
+                        for i in range(len(zones_suspectes)):
+                            score = valeurs[i] + 200*(np.pi - 2*np.arctan(0.5*np.linalg.norm(self.detected_sources[self.source_verif][0] - zones_suspectes[i])))/(np.pi)
+                            if score > score_max:
+                                i_max = i
+                    
+                        self.zones_recherche = (zones_suspectes[i_max], valeurs[i_max])
                         self.radius = 1
                         self.phase = 3
                         
-                        print("Regroupement:", self.zones_recherche)
+                        print("Regroupement vers ", self.zones_recherche)
+                
+                else:
+                    ratio = (self.prev(x[robotNo, :]) / measurement[robotNo])
+                    if (ratio < 0.96)  or (ratio > 1.1):
+                        self.zones_recherche = (x[robotNo, :], measurement[robotNo])
+                        self.radius = 1
+                        self.phase = 3
+                        
+                        print("Regroupement vers ", self.zones_recherche)
+                    
+                    if self.cnt > 50:
+                        self.radius = 1
+                        self.phase = 3
+                            
+                        print("Arrêt de la recherche")
         
         # initialize control input vector for current robot i
         dist_consensus = np.linalg.norm(vel_vector)
@@ -362,7 +386,7 @@ class Controleur():
                     vel_vector += ((dist - dist_rel)/dist)*(x[i, :] - x[robotNo, :])
             
             sum_distances += abs((dist - np.linalg.norm(relative_pose[robotNo, :]))/self.radius) # prendre en compte le fait d'arriver au niveau de l'objectif
-            vel_vector += self.zones_recherche[0] - center_formation
+            vel_vector += 3*(self.zones_recherche[0] - center_formation)
             
             # initialize control input vector for current robot i
             dist_consensus = np.linalg.norm(vel_vector)
@@ -376,7 +400,7 @@ class Controleur():
             if (sum_distances < 1.5) and (np.linalg.norm(self.zones_recherche[0] - center_formation) < 0.5):
                 self.phase = 1 
                 
-                print("Descente de gradient")         
+                print("Reprise de la descente de gradient")         
 
         # .................  TO BE COMPLETED HERE .............................
         return v
@@ -441,7 +465,6 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     pot_measurement = np.zeros(N)
     for m in range(N):
         pot_measurement[m] = pot.value(x[m,:])
-        #gridmap_record.update(x[m, 0], x[m, 1], pot_measurement[m], t)
         
 
     # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -454,8 +477,36 @@ def potential_seeking_ctrl(t, robotNo, robots_poses):
     return ui[0], ui[1], pot   # potential is also returned to be used by main script for displays (DO NOT MODIFY)
 # =============================================================================
 
-def visu_solution():
+def visu_solution(save=None):
     global controleur
+    global pot
     
-    controleur.law_est.plot_fit(fit_actuel=False)
+    #controleur.law_est.plot_fit(fit_actuel=False)
+    print("Sources trouvées:")
+    for id, det_sources in controleur.detected_sources.items():
+        x, y = det_sources[0]
+        amp = det_sources[1]
+        sigma_xx, sigma_xy, sigma_yy = det_sources[4][0, 0], det_sources[4][0, 1], det_sources[4][1, 1]
 
+        print(f"\tID: {id}", f" Amplitude: {amp:.2f}", f" Position: (x, y) = ({x:.2f}, {y:.2f})", f" Sigma: ({sigma_xx:.2f}, {sigma_yy:.2f}, {sigma_xy:.2f})")
+
+    filename = "Results/" + save + "_detections.txt"
+    with open(filename, "w") as file:
+        file.write("Sources trouvées:\n")
+        for id, det_sources in controleur.detected_sources.items():
+            x, y = det_sources[0]
+            amp = det_sources[1]
+            sigma_xx, sigma_xy, sigma_yy = det_sources[4][0, 0], det_sources[4][0, 1], det_sources[4][1, 1]
+            file.write(f"\tID: {id}")
+            file.write(f"\tAmplitude: {amp:.2f}")
+            file.write(f"\tPosition: (x, y) = ({x:.2f}, {y:.2f})")
+            file.write(f"\tSigma: ({sigma_xx:.2f}, {sigma_xy:.2f}, {sigma_yy:.2f})\n")
+            file.write("\t----------------\n")
+        
+        file.write("\nMu et Covariances:\n")
+        for i, (mu, cov) in enumerate(zip(pot.mu, pot.distribution)):
+            file.write(f"\tMu {i+1}: ({mu[0]:.2f}, {mu[1]:.2f})\n")
+            file.write(f"\tCovariance:")
+            file.write(f"\t[{cov.cov[0,0]:.2f}, {cov.cov[0,1]:.2f}, {cov.cov[1,1]:.2f}]\n")
+            file.write("\t----------------\n")
+    print(f"Sources détectées et potentiels sauvegardés dans {filename}")

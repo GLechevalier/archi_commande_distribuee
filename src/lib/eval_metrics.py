@@ -13,15 +13,20 @@ def eval_metrics(simulation, potential_measurements, pot):
 
     distances = np.zeros(simulation.nbOfRobots)
     
+    max_potentials = np.max(potential_measurements, axis=0)
+    id_maxpotential = np.argmax(potential_measurements, axis=0)[0]
+    dist_until_max = 0
     
     for i_rob in range(simulation.nbOfRobots):
         simu = simulation.robotSimulation[i_rob]
         nb_times = len(simu.t)
         for i_time in range(1,nb_times):
             distances[i_rob] += np.linalg.norm(simu.state[i_time] - simu.state[i_time-1])
+            
+            if i_time == id_maxpotential:
+                dist_until_max += distances[i_rob]
     
-    
-    max_potentials = np.max(potential_measurements, axis=0)
+   
     
     max_pot_to_be_found = np.max(pot.value(pot.mu))
     max_pot_found = np.max(max_potentials)
@@ -32,4 +37,4 @@ def eval_metrics(simulation, potential_measurements, pot):
     total_distance = np.sum(distances)
 
 
-    return relative_pot_found_error, total_distance
+    return relative_pot_found_error, total_distance, dist_until_max

@@ -131,6 +131,7 @@ class RobotSimulation:
         graph.set_xlabel('t (s)')
         graph.set_ylabel('x (m)')
         
+        
         # plot y Vs time
         fig3 = plt.figure(figNo+1)
         graph= fig3.add_subplot(111)
@@ -138,6 +139,7 @@ class RobotSimulation:
         graph.grid(True)
         graph.set_xlabel('t (s)')
         graph.set_ylabel('y (m)')
+        
         
         # plot theta Vs time (for unicycle dynamics only)
         if (self.robot.dynamics=='unicycle'):
@@ -147,6 +149,7 @@ class RobotSimulation:
             graph.grid(True)
             graph.set_xlabel('t (s)')
             graph.set_ylabel('theta (rad)')
+        
             
         plt.show()
             
@@ -166,6 +169,7 @@ class RobotSimulation:
             graph.set_ylabel('V (m/s)')
         if (self.robot.dynamics=='singleIntegrator2D'):
             graph.set_ylabel('ux (m/s)')
+            
         
         # plot uy Vs time
         fig3 = plt.figure(figNo+1)
@@ -177,7 +181,6 @@ class RobotSimulation:
             graph.set_ylabel('omega (rad/s)')
         if (self.robot.dynamics=='singleIntegrator2D'):
             graph.set_ylabel('uy (m/s)')
-            
         
         plt.show()
         
@@ -244,6 +247,23 @@ class RobotSimulation:
             
             i=i+1
             
+    def saveSimulation(self, save=None):
+        """
+        Sauvegarde l'état de la simulation (self.state et self.t) dans un fichier .npz
+        """
+        filename = "Results/" + save + "_simu.npz"
+        np.savez(filename, state=self.state, t=self.t)
+        
+    def loadSimulation(self, save=None):
+        """
+        Charge l'état de la simulation depuis un fichier .npz
+        """
+        filename = "Results/" + save + "_simu.npz"
+        data = np.load(filename)
+        
+        self.state = data["state"]
+        self.t = data["t"]
+            
     
             
 
@@ -286,7 +306,7 @@ class FleetSimulation:
 
 
     # -----------------------------------------------------------------------------------
-    def plotXY(self, figNo=1,  xmin=-10, xmax=10, ymin=-10, ymax=10, steps=None, links=False, potential=None):
+    def plotXY(self, figNo=1,  xmin=-10, xmax=10, ymin=-10, ymax=10, steps=None, links=False, potential=None, save=None):
     # -----------------------------------------------------------------------------------
 
         fig1 = plt.figure(figNo)
@@ -323,15 +343,21 @@ class FleetSimulation:
                         graph.plot(xi, yi, marker = '8', linestyle="None", markersize=5, color=colorList[i_color] )
             
             plt.gca().set_prop_cycle(None)
-            
         
         graph.grid(True)
         graph.set_xlabel('x (m)')
         graph.set_ylabel('y (m)')
         
+        if save:
+            if links:
+                fig1.savefig("Results/"+save+"_XYrobots.png")
+            else:
+                fig1.savefig("Results/"+save+"_XY.png")
+            
+        
         
     # -----------------------------------------------------------------------------------
-    def plotState(self, figNo=1,  xmin=-10, xmax=10, ymin=-10, ymax=10):
+    def plotState(self, figNo=1,  xmin=-10, xmax=10, ymin=-10, ymax=10, save=None):
     # -----------------------------------------------------------------------------------
         
         colorList = ['r', 'g', 'b', 'y', 'c', 'm', 'k']
@@ -346,6 +372,9 @@ class FleetSimulation:
         graph.set_xlabel('t (s)')
         graph.set_ylabel('x (m)')
         
+        if save:
+            fig2.savefig("Results/"+save+"_state1.png")
+        
         # plot y Vs time
         fig3 = plt.figure(figNo+1)
         graph= fig3.add_subplot(111)
@@ -355,6 +384,9 @@ class FleetSimulation:
         graph.grid(True)
         graph.set_xlabel('t (s)')
         graph.set_ylabel('y (m)')
+        
+        if save:
+            fig3.savefig("Results/"+save+"_state2.png")
         
         # plot theta Vs time (for unicycle dynamics only)
         if (self.robotSimulation[0].robot.dynamics=='unicycle'):
@@ -367,11 +399,14 @@ class FleetSimulation:
             graph.set_xlabel('t (s)')
             graph.set_ylabel('theta (rad)')
             
+            if save:
+                fig4.savefig("Results/"+save+"_state3.png")
+            
             
             
             
     # -----------------------------------------------------------------------------------
-    def plotCtrl(self, figNo=1,  xmin=-10, xmax=10, ymin=-10, ymax=10):
+    def plotCtrl(self, figNo=1,  xmin=-10, xmax=10, ymin=-10, ymax=10, save=None):
     # -----------------------------------------------------------------------------------
         
         colorList = ['r', 'g', 'b', 'y', 'c', 'm', 'k']
@@ -388,6 +423,9 @@ class FleetSimulation:
             graph.set_ylabel('V (m/s)')
         if (self.robotSimulation[0].robot.dynamics=='singleIntegrator2D'):
             graph.set_ylabel('ux (m/s)')
+            
+        if save:
+            fig2.savefig("Results/"+save+"_ctrl1.png")
         
         # plot y Vs time
         fig3 = plt.figure(figNo+1)
@@ -401,6 +439,9 @@ class FleetSimulation:
             graph.set_ylabel('omega (rad/s)')
         if (self.robotSimulation[0].robot.dynamics=='singleIntegrator2D'):
             graph.set_ylabel('uy (m/s)')
+            
+        if save:
+            fig3.savefig("Results/"+save+"_ctrl2.png")
         
     
     # -------------------------------------------------------------------------       
@@ -469,7 +510,36 @@ class FleetSimulation:
             
             plt.pause(pause)
             
-            i=i+1
+            i= i + 10
+            
+    def saveSimulation(self, save=None):
+        """
+        Sauvegarde l'état de la simulation (self.state et self.t) dans un fichier .npz
+        """
+        
+        for i_rob in range(self.nbOfRobots):
+            self.robotSimulation[i_rob].saveSimulation(save + "_r" + str(i_rob))
+            
+        filename = "Results/" + save + "_simu.npz"
+        np.savez(filename, t=self.t, nrob=self.nbOfRobots)
+        
+
+    def loadSimulation(self, save=None):
+        """
+        Charge l'état de la simulation depuis un fichier .npz
+        """
+        filename = "Results/" + save + "_simu.npz"
+        data = np.load(filename)
+        
+        self.t = data["t"]
+        self.nbOfRobots = data["nrob"]
+        
+        for i in range(self.nbOfRobots):
+            self.robotSimulation[i].loadSimulation(save + "_r" + str(i))
+        
+        pot = Potential(difficulty=1, save=save)
+        
+        return pot
     '''
     # -----------------------------------------------------------------------------------------
     def plotFleet(self, figNo = 1, xmin=-10, xmax=10, ymin=-10, ymax=10, mod=None, links=True):
@@ -641,8 +711,6 @@ if __name__=='__main__':
 
 
 
-
-
     # ---- fleet simulation test (unicycle dynamics)
     if (test_no==4):    
         nbOfRobots = 4  
@@ -706,5 +774,7 @@ if __name__=='__main__':
         simulation.plotXY(figNo=3, steps=100, links=True)
         simulation.plotState(figNo=4)
         simulation.plotCtrl(figNo=7)
+        
+    
         
     

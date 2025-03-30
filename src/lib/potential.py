@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from scipy.stats import multivariate_normal
+import pickle
 
 
 
@@ -19,7 +20,7 @@ class Potential:
 # =============================================================================
     
     # -------------------------------------------------------------------------
-    def __init__(self, difficulty=1, random=False):
+    def __init__(self, difficulty=1, random=False, save=None):
     # -------------------------------------------------------------------------    
         if (difficulty<1)or(difficulty>3):
             raise NameError("Difficulty must be >=1 and <=3")
@@ -35,17 +36,28 @@ class Potential:
         self.ystep = 0.05
         
         
-        
-        if (random):
-            xwidth = np.abs(self.xmax - self.xmin)
-            ywidth = np.abs(self.ymax - self.ymin)
-            self.mu1 = [ 0.6*(xwidth*np.random.rand()-xwidth/2.) , 0.6*(ywidth*np.random.rand()-ywidth/2.) ]
-            self.mu2 = [ xwidth*np.random.rand()-xwidth/2. , ywidth*np.random.rand()-ywidth/2. ]
-            self.mu3 = [ xwidth*np.random.rand()-xwidth/2. , ywidth*np.random.rand()-ywidth/2. ]
+        if save:
+            self.loadPotentialMu(save)
+            self.difficulty = len(self.mu)
+            
+            
+            self.mu1 = self.mu[0]
+            if (self.difficulty > 1):
+                self.mu2 = self.mu[1]
+                if (self.difficulty > 2):
+                    self.mu3 = self.mu[2]
+
         else:
-            self.mu1 = [6, 4]
-            self.mu2 = [-2, -2]
-            self.mu3 = [-7, 10]
+            if (random):
+                xwidth = np.abs(self.xmax - self.xmin)
+                ywidth = np.abs(self.ymax - self.ymin)
+                self.mu1 = [ 0.6*(xwidth*np.random.rand()-xwidth/2.) , 0.6*(ywidth*np.random.rand()-ywidth/2.) ]
+                self.mu2 = [ xwidth*np.random.rand()-xwidth/2. , ywidth*np.random.rand()-ywidth/2. ]
+                self.mu3 = [ xwidth*np.random.rand()-xwidth/2. , ywidth*np.random.rand()-ywidth/2. ]
+            else:
+                self.mu1 = [6, 4]
+                self.mu2 = [-2, -2]
+                self.mu3 = [-7, 10]
         
         self.gaussian1 = multivariate_normal(self.mu1, [[1.0, 0.], [0., 1.]])
         self.gaussian2 = multivariate_normal(self.mu2, [[0.5, 0.3], [0.3, 0.5]])
@@ -57,21 +69,21 @@ class Potential:
         
         
         self.mu = [self.mu1]
-        if (difficulty>1):
+        if (self.difficulty>1):
             self.mu.append(self.mu2)
-            if (difficulty>2):
+            if (self.difficulty>2):
                 self.mu.append(self.mu3)
         
         self.distribution = [self.gaussian1]
-        if (difficulty>1):
+        if (self.difficulty>1):
             self.distribution.append(self.gaussian2)
-            if (difficulty>2):
+            if (self.difficulty>2):
                 self.distribution.append(self.gaussian3)
                 
         self.weight = [self.weight1]
-        if (difficulty>1):
+        if (self.difficulty>1):
             self.weight.append(self.weight2)
-            if (difficulty>2):
+            if (self.difficulty>2):
                 self.weight.append(self.weight3)
 
 
@@ -114,6 +126,15 @@ class Potential:
     
     
     def plot_essai(self, weight, distr, colorbar=True):
+        """
+        Foction permettant de vérifier que la zone de dominance d'une source détectée permet bien de détecter les autres sources'
+
+        Args:
+            noFigure (_type_, optional): _description_. Defaults to None.
+            fig (_type_, optional): _description_. Defaults to None.
+            ax (_type_, optional): _description_. Defaults to None.
+            colorbar (bool, optional): _description_. Defaults to True.
+        """
         x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
         pos = np.dstack((x, y))
         potentialFieldForPlot = self.value(pos)
@@ -157,13 +178,26 @@ class Potential:
     # -------------------------- -----------------------------------------------
     def plot_test(self, noFigure=None,fig=None,ax=None, colorbar=True):
     # -------------------------------------------------------------------------
+        """
+        Foction permettant de voir les zones de dominance des différentes sources
+
+        Args:
+            noFigure (_type_, optional): _description_. Defaults to None.
+            fig (_type_, optional): _description_. Defaults to None.
+            ax (_type_, optional): _description_. Defaults to None.
+            colorbar (bool, optional): _description_. Defaults to True.
+        """
         x, y = np.mgrid[self.xmin:self.xmax:self.xstep, self.ymin:self.ymax:self.ystep]
         pos = np.dstack((x, y))
         potentialFieldForPlot = self.value(pos)
         
-        potential1 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + self.weight[2]*self.distribution[2].pdf(pos) + 1e-309)
-        potential2 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
-        potential3 = 310. + np.log10(self.weight[1]*self.distribution[2].pdf(pos) + self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
+        # potential1 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + self.weight[2]*self.distribution[2].pdf(pos) + 1e-309)
+        # potential2 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
+        # potential3 = 310. + np.log10(self.weight[1]*self.distribution[2].pdf(pos) + self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
+        
+        potential1 = 310. + np.log10(self.weight[0]*self.distribution[0].pdf(pos) + 1e-309)
+        potential2 = 310. + np.log10(self.weight[1]*self.distribution[1].pdf(pos) + 1e-309)
+        potential3 = 310. + np.log10(self.weight[1]*self.distribution[2].pdf(pos) + 1e-309)
         
         ratio1 = np.fmax(potential1 / potentialFieldForPlot, 0.)
         ratio2 = np.fmax(potential2 / potentialFieldForPlot, 0.)
@@ -215,8 +249,6 @@ class Potential:
         plt.title("Zones où ratio > 0.95")
         plt.xlabel("X")
         plt.ylabel("Y")
-        
-        return fig, ax
 
     # -------------------------------------------------------------------------
     def grad(self, pos1, pos2):
@@ -289,6 +321,24 @@ class Potential:
     
     def get_truth(self):
         print(self.mu)
+        
+    def savePotentialMu(self, save=None):
+        """
+        Sauvegarde les valeurs de mu (centres des distributions) de potential dans un fichier .pkl
+        """
+        filename = "Results/" + save + "_potentiel.pkl"
+        with open(filename, "wb") as file:
+            pickle.dump(self.mu, file)
+        
+
+    def loadPotentialMu(self, save=None):
+        """
+        Charge les valeurs de mu (centres des distributions) depuis un fichier .pkl
+        """
+        filename = "Results/" + save + "_potentiel.pkl"
+        with open(filename, "rb") as file:
+            self.mu = pickle.load(file)
+        print(f"Valeurs de mu chargées depuis {filename}")
 
 
 # ======================== END OF CLASS Potential =============================
